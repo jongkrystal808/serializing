@@ -1,0 +1,299 @@
+:root {
+  --bg: #f3f6fb;
+  --card: #ffffff;
+  --text: #1d2939;
+  --muted: #667085;
+  --line: #d0d5dd;
+  --primary: #0b6bcb;
+  --danger: #b42318;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", "Noto Sans TC", sans-serif;
+  color: var(--text);
+  background: linear-gradient(150deg, #edf4ff 0%, #f8fbff 100%);
+}
+
+.container {
+  max-width: 1024px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.section-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #344054;
+  letter-spacing: 0.2px;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+input[type="text"] {
+  flex: 1;
+  min-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+select {
+  min-width: 220px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 14px;
+  background: #ffffff;
+  color: var(--text);
+}
+
+button {
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: #475467;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+#status,
+#status-lunfei {
+  margin-top: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+#status.error,
+#status-lunfei.error {
+  color: var(--danger);
+}
+
+#status.loading,
+#status-lunfei.loading {
+  color: #175cd3;
+}
+
+.status-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loading-indicator {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #bfd4ff;
+  border-top-color: #175cd3;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: none;
+}
+
+.loading-indicator.active {
+  display: inline-block;
+}
+
+.error-box {
+  margin-top: 10px;
+  border: 1px solid #fecdca;
+  background: #fef3f2;
+  color: #b42318;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.preview-headline {
+  background: #ecf5ff;
+  border: 1px solid #b2ddff;
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.preview-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: #175cd3;
+  margin: 0 0 6px;
+}
+
+.preview-subtitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.preview-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+
+.preview-tab {
+  background: #e4e7ec;
+  color: #1d2939;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preview-tab.active {
+  background: #175cd3;
+  color: #ffffff;
+}
+
+.preview-pane {
+  display: none;
+}
+
+.preview-pane.active {
+  display: block;
+}
+
+.history-list {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.history-actions {
+  margin-top: 10px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.sheet-pane-meta {
+  margin: 0 0 10px;
+  color: #667085;
+  font-size: 13px;
+}
+
+.sheet-table-wrap {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: auto;
+  max-height: 420px;
+  background: #ffffff;
+}
+
+.sheet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.sheet-table th,
+.sheet-table td {
+  border-bottom: 1px solid #eaecf0;
+  border-right: 1px solid #eaecf0;
+  padding: 8px;
+  text-align: left;
+  vertical-align: top;
+  white-space: pre-wrap;
+  min-width: 120px;
+}
+
+.sheet-table th:last-child,
+.sheet-table td:last-child {
+  border-right: 0;
+}
+
+.sheet-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f2f4f7;
+  z-index: 1;
+  font-weight: 700;
+}
+
+.copyable-cell {
+  cursor: copy;
+}
+
+.copyable-cell:hover {
+  background: #eff8ff;
+}
+
+.copyable-cell.copied {
+  background: #d1fadf;
+}
+
+.preview-item {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.preview-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.preview-value {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.copy-btn {
+  margin-top: 8px;
+  background: #344054;
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+@media (max-width: 768px) {
+  .preview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
