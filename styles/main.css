@@ -87,19 +87,22 @@ button:disabled {
 }
 
 #status,
-#status-lunfei {
+#status-lunfei,
+#status-bng {
   margin-top: 0;
   color: var(--muted);
   font-size: 14px;
 }
 
 #status.error,
-#status-lunfei.error {
+#status-lunfei.error,
+#status-bng.error {
   color: var(--danger);
 }
 
 #status.loading,
-#status-lunfei.loading {
+#status-lunfei.loading,
+#status-bng.loading {
   color: #175cd3;
 }
 
@@ -159,6 +162,36 @@ button:disabled {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
+}
+
+.bng-preview-groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.bng-preview-group {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fcfdff;
+}
+
+.bng-preview-group .section-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+}
+
+.bng-preview-grid {
+  gap: 8px;
+}
+
+.bng-preview-grid .preview-item {
+  padding: 8px;
+}
+
+.bng-preview-groups .bng-preview-group:last-child {
+  grid-column: 1 / -1;
 }
 
 .preview-tabs {
@@ -285,6 +318,14 @@ button:disabled {
 @media (max-width: 768px) {
   .preview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .bng-preview-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .bng-preview-groups .bng-preview-group:last-child {
+    grid-column: auto;
   }
 }
 

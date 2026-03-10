@@ -66,6 +66,43 @@
           PCBA: ["對應PCBA", "PCBA", "對應板號"],
           QTY: ["Q'ty", "QTY", "Qty", "數量"]
         }
+      },
+      bng: {
+        key: "bng",
+        label: "超恩",
+        sheetName: "超恩出貨",
+        parseRules: ["trim"],
+        title: "SN-GENERATOR 超恩序號工具",
+        sourceHint: "來源：H:\\TE\\To Claire\\出貨記錄總表（Sheet：超恩出貨）",
+        searchPlaceholder: "輸入機種名稱",
+        generationHistoryKey: "sn_generation_history_by_work_order",
+        serialRule: { type: "range_expand" },
+        exportStrategy: "single_sn",
+        exportColumns: ["PO", "Model", "料號", "SN", "Date"],
+        columns: {
+          DATE: "日期",
+          WORK_ORDER: "工單",
+          MODEL: "機種名稱",
+          PART_NO: "機種料號",
+          QTY: "生產數量",
+          MAC_RANGE: "MAC  Address",
+          MAC_QTY: "MAC數量",
+          MAC_BOARD_QTY: "MAC板子用量數量",
+          SN_RANGE: "序號區間",
+          UUID_RANGE: "UUID區間"
+        },
+        columnAliases: {
+          DATE: ["日期", "Date"],
+          WORK_ORDER: ["工單", "工單號"],
+          MODEL: ["機種名稱", "Model", "MODEL"],
+          PART_NO: ["機種料號", "料號", "P/N", "PN"],
+          QTY: ["生產數量", "數量", "QTY", "Qty"],
+          MAC_RANGE: ["MAC  Address", "MAC Address", "MAC區間"],
+          MAC_QTY: ["MAC數量"],
+          MAC_BOARD_QTY: ["MAC板子用量數量", "MAC板用量數量"],
+          SN_RANGE: ["序號區間", "SN區間"],
+          UUID_RANGE: ["UUID區間", "UUID"]
+        }
       }
     };
     window.CUSTOMERS = CUSTOMERS;
@@ -82,6 +119,7 @@
     <div class="preview-tabs">
       <button type="button" id="tab-yingbang" class="preview-tab active" data-customer="yingbang">營邦</button>
       <button type="button" id="tab-lunfei" class="preview-tab" data-customer="lunfei">倫飛</button>
+      <button type="button" id="tab-bng" class="preview-tab" data-customer="bng">超恩</button>
     </div>
   </section>
 
@@ -150,6 +188,39 @@
       <p>請先讀取倫飛 Excel（Sheet：倫飛出貨）。</p>
     </section>
     <section id="history-panel-lunfei" class="card" hidden>
+      <h2>歷史記憶</h2>
+      <p>按「查看歷史」以顯示目前歷史資料。</p>
+    </section>
+  </section>
+
+  <section id="bng-workspace" hidden>
+    <p>來源：H:\TE\To Claire\出貨記錄總表（Sheet：超恩出貨）</p>
+    <section class="card">
+      <h2 class="section-title">資料來源設定（超恩）</h2>
+      <div class="toolbar">
+        <button id="btn-bind-bng" class="btn-secondary">綁定來源</button>
+        <button id="btn-load-bng">讀取表格</button>
+        <button id="btn-history-bng" class="btn-secondary">查看歷史</button>
+      </div>
+      <input id="file-input-bng" type="file" accept=".xlsx,.xls" hidden>
+      <div class="status-row">
+        <span id="loading-indicator-bng" class="loading-indicator" aria-hidden="true"></span>
+        <p id="status-bng">尚未讀取超恩 Excel 檔案。</p>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="section-title">查詢與操作（超恩）</h2>
+      <div class="toolbar">
+        <input id="search-input-bng" type="text" placeholder="輸入機種名稱" disabled>
+        <button id="btn-query-bng" disabled>查詢/刷新</button>
+        <button id="btn-export-bng" disabled>生成序號 & 匯出</button>
+      </div>
+    </section>
+    <section id="preview-panel-bng" class="card">
+      <h2>超恩預覽窗格</h2>
+      <p>請先讀取超恩 Excel（Sheet：超恩出貨）。</p>
+    </section>
+    <section id="history-panel-bng" class="card" hidden>
       <h2>歷史記憶</h2>
       <p>按「查看歷史」以顯示目前歷史資料。</p>
     </section>

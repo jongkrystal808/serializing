@@ -1,8 +1,8 @@
 # Project Architecture
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.2.2
-**Last Updated:** 2026-03-05
+**Version:** 0.2.3
+**Last Updated:** 2026-03-06
 
 ---
 
@@ -139,6 +139,16 @@ const CUSTOMERS = {
     parseRules:  ['arrow'],
     serialRule:  { type: 'lunfei_weekly' },
     exportStrategy: 'dual_sn_box'
+  },
+  bng: {
+    label:       '超恩',
+    sheetName:   '超恩出貨',
+    storageKey:  'bng',
+    searchField: '機種名稱',
+    parseRules:  ['trim'],
+    serialRule:  { type: 'range_expand' },
+    exportStrategy: 'single_sn',
+    exportColumns: ['PO', 'Model', '料號', 'SN', 'Date']
   }
 };
 ```
@@ -166,6 +176,12 @@ const CUSTOMERS = {
 
 "lunfei_sn_generation_history_by_mo"
   → { "MO號": ["YYYY-MM-DD-MO號", ...] }
+
+"bng_sn_history"
+  → { "工單": lastSerial(整數) }
+
+"bng_sn_generation_history_by_work_order"
+  → { "工單": ["YYYY-MM-DD-工單", ...] }
 ```
 
 ---
@@ -252,6 +268,31 @@ const LUNFEI_MODEL_ALERTS = [
     disableGenerate: true
   }
 ];
+```
+
+---
+
+### 6.1 超恩區間展開規則
+
+**Decision:** 超恩序號採來源欄位區間直接展開，不使用流水號累加格式。輸入格式可為 `A ~ B` 或 `A B`（自動補 ` ~ `）。
+
+**規則：**
+```
+MAC Address 區間：展開後筆數必須等於 MAC數量
+序號區間：展開後筆數必須等於 生產數量
+UUID區間：若為 0 顯示「無」；若有區間則展開後筆數必須等於 生產數量
+UUID 尾碼固定 17 個 F（FFFFFFFFFFFFFFFFF）
+```
+
+**輸出：**
+```
+single_sn（SN sheet）
+欄位：PO / Model / 料號 / SN / Date
+PO 來源：工單
+Model 來源：機種名稱
+料號 來源：機種料號
+SN 來源：序號區間展開結果
+Date 來源：日期（yyyy/mm/dd）
 ```
 
 ---
@@ -460,6 +501,32 @@ buildWorkbookByStrategy(exportStrategy, args)
 
 ---
 
+### 超恩流程
+
+```
+讀取表格 →
+├── 解析「超恩出貨」sheet（trim 規則）
+└── rowData[] 暫存記憶體
+
+搜尋機種名稱 →
+├── 比對機種名稱（精確匹配優先，其次部分匹配）
+├── 查詢成功：
+│   ├── 帶入預覽欄位（日期/工單/機種名稱/機種料號/生產數量/MAC Address/MAC數量/MAC板子用量數量/序號區間/UUID區間）
+│   └── 區間顯示正規化（空白分隔自動補為 ` ~ `）
+└── 查詢失敗：顯示「找不到機種名稱：{輸入值}」
+
+生成序號 & 匯出 →
+├── 展開 MAC 區間（hex/dec 自動判斷）
+├── 展開 SN 區間（hex/dec 自動判斷）
+├── 展開 UUID 區間（尾碼 17 個 F；值為 0 則顯示無）
+├── 驗證筆數（MAC=MAC數量，SN/UUID=生產數量）
+├── 更新 bng_sn_history[工單]
+├── 追加 bng_sn_generation_history_by_work_order[工單]
+└── 匯出 Excel（1 sheet：PO/Model/料號/SN/Date）
+```
+
+---
+
 ### 全客戶基本配置（Baseline）
 
 每位客戶都必須具備以下基本功能：
@@ -581,6 +648,32 @@ Sheet "box"
   欄F: 日期（yyyy/mm/dd，當日，1 筆）
 ```
 
+### 超恩 — 來源欄位對應（出貨記錄總表 → 超恩出貨 sheet）
+
+```
+日期               → 預覽/輸出 Date
+工單               → 歷史主鍵 / 輸出 PO
+機種名稱            → 搜尋鍵值 / 輸出 Model
+機種料號            → 輸出料號
+生產數量            → 生成筆數驗證（SN / UUID）
+MAC Address         → MAC 區間展開
+MAC數量             → MAC 區間筆數驗證
+MAC板子用量數量      → 預覽顯示
+序號區間            → 匯出 SN 來源
+UUID區間            → UUID 區間展開（0 表示無）
+```
+
+### 超恩 — 輸出 Excel Schema（1 Sheet）
+
+```
+Sheet "SN"
+  欄A: PO
+  欄B: Model
+  欄C: 料號
+  欄D: SN
+  欄E: Date（yyyy/mm/dd）
+```
+
 ### localStorage Schema（多客戶）
 
 ```javascript
@@ -591,6 +684,10 @@ Sheet "box"
 // 倫飛
 "lunfei_sn_history"                            → { "YYYY-WNN": lastSerial }
 "lunfei_sn_generation_history_by_mo"           → { "MO號": ["YYYY-MM-DD-MO號"] }
+
+// 超恩
+"bng_sn_history"                               → { "工單": lastSerial }
+"bng_sn_generation_history_by_work_order"      → { "工單": ["YYYY-MM-DD-工單"] }
 ```
 
 ---
@@ -620,6 +717,7 @@ Sheet "box"
 - **0.2.0** - 2026-03-05 - 重構為多客戶骨架，新增倫飛客戶模組
 - **0.2.1** - 2026-03-05 - 客戶差異策略化（parseRules/serialRule/exportStrategy），匯出欄位與內容可依客戶自訂，並定義全客戶基本配置
 - **0.2.2** - 2026-03-05 - 倫飛新增 MO/Q'ty 斜線配對規則；歷史表格 key 標示改為依客戶語意顯示（營邦採單號碼 / 倫飛週別 key）
+- **0.2.3** - 2026-03-06 - 新增超恩客戶（bng）：機種名稱查詢、區間展開生成（MAC/SN/UUID）、UUID=0 顯示無、single_sn 匯出欄位 `PO/Model/料號/SN/Date`
 
 ---
 
@@ -685,6 +783,12 @@ Sheet "box"
 **Decision:** 新增 `resolveQtyByPairedSlash()`，在倫飛預覽與生成流程統一使用
 **Consequences:** 可正確處理 `MO=.../...` 對應 `Q'ty=.../...`；異常格式仍保留單值 fallback
 
+### ADR-007: 超恩改用區間展開而非流水號模板
+**Date:** 2026-03-06 | **Status:** Accepted
+**Context:** 超恩來源資料已提供 `MAC Address/序號區間/UUID區間`，且要求筆數與欄位數量一致驗證
+**Decision:** 新增區間展開流程（支援 `A ~ B` 與 `A B`），依字元自動判斷 hex/dec；UUID `0` 視為無
+**Consequences:** 可直接遵循客戶來源區間，不依賴固定 SN 模板；若來源區間與數量欄位不一致，匯出前即阻擋並提示
+
 ---
 
 ## 🎨 Design Patterns Used
@@ -697,4 +801,4 @@ Sheet "box"
 ---
 
 *This document maintained in current state for effective development*
-*Last updated: 2026-03-05*
+*Last updated: 2026-03-06*

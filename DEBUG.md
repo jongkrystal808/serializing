@@ -1,8 +1,8 @@
 # Debug Log
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.2.1
-**Last Updated:** 2026-03-05
+**Version:** 0.2.2
+**Last Updated:** 2026-03-10
 
 ---
 
@@ -199,8 +199,8 @@
 
 > 開發過程中的臨時觀察、懷疑方向、或尚未確認的異常，可先記在這裡
 
-*（目前無筆記）*
+- 2026-03-10：完成超恩預覽分區調整，並統一全客戶匯出檔名為 `{客戶名}-SN.xlsx`、生成歷史格式為 `YYYY-MM-DD-工單`；本次未新增 Open Bug。
 
 ---
 
-*Last updated: 2026-03-05*
+*Last updated: 2026-03-10*

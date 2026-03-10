@@ -1,8 +1,8 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.2.1
-**Last Updated:** 2026-03-05
+**Version:** 0.2.4
+**Last Updated:** 2026-03-10
 
 ---
 
@@ -155,6 +155,18 @@
 
 ## ✅ Done
 
+### ✅ T19 — 全客戶匯出命名與歷史格式統一（完成：2026-03-10）
+**Module:** 全域 / UI / ExcelExport / History
+**Notes:** 超恩預覽窗格改為分區顯示（SN/MAC/UUID/FW&BIOS/BOX）；BOX 分區機種名稱遵循 `' 1.'` 截斷規則。全客戶匯出檔名統一為 `{客戶名}-SN.xlsx`（營邦/倫飛/超恩/KOYA），生成歷史留痕統一為 `YYYY-MM-DD-工單`。
+
+### ✅ T18 — KOYA 客戶模組（完成：2026-03-09）
+**Module:** KOYA / 全域
+**Notes:** 已依 `intake-new-customer.md` 新增 `chg`（KOYA）客戶：讀取「KOYA出貨」sheet，工單欄位支援模糊查詢；預覽顯示工單/機種/PO/批量，並分為 Label 分區（PN、小張貼紙）與 Box Label 分區（滿箱數量、需求、尾數數量）。匯出改為雙 sheet（`SN` + `BOX`）：SN 欄位為 `工單/PN` 並依小張貼紙數量重複列；BOX 欄位為 `PO/PN/full PN/DDC PN/DDC LOT/QTY/DATE`，其中 DATE 取匯出當天 `yyyy/mm/dd`。歷史鍵使用工單，支援查看歷史、單筆重置與清空當前工單歷史。
+
+### ✅ T17 — 超恩客戶模組（完成：2026-03-06）
+**Module:** 超恩 / 全域
+**Notes:** 已依 intake 規格更新超恩（`bng`）流程：讀取「超恩出貨」後以 `MO` 模糊查詢；預覽顯示日期/工單/機種名稱/機種料號/生產數量/MAC Address/MAC數量/MAC板子用量數量/序號區間/UUID區間；區間格式可自動補 ` ~ `，UUID=`0` 顯示「無」。匯出改為雙 sheet（`SN` + `BOX`）：SN 欄位為 `序號/MAC Address/UUID/BIOS/FW`，BOX 欄位為 `PO/Model/料號/SN/思創PN/Date`，檔名格式 `{YYYYMMDD}-{工單}-超恩.xlsx`。生成歷史紀錄改為 `工單-YYYYMMDDHHmmss`。
+
 ### ✅ T16 — 倫飛整合測試（完成：2026-03-05）
 **Module:** 全域
 **Notes:** 已完成自動化整合模擬（同週跨 MO 接續、新週重置、雙 sheet 匯出、客戶前綴 key 隔離）並確認流程通過；型號彈窗與按鈕禁用規則已在查詢流程中驗證。後續依 test-report 完成 hotfix：倫飛歷史欄位改為週別 key、`MO/Q'ty` 斜線配對導入預覽與生成流程。
@@ -241,7 +253,10 @@
 |-------|-------|------|-------------|------|
 | Phase 1 MVP（營邦） | 9 | 9 | 0 | 0 |
 | Phase 2（多客戶 + 倫飛） | 6 | 6 | 0 | 0 |
-| **Total** | **15** | **15** | **0** | **0** |
+| Phase 3（新增超恩） | 1 | 1 | 0 | 0 |
+| Phase 4（新增 KOYA） | 1 | 1 | 0 | 0 |
+| Phase 5（全客戶規則統一） | 1 | 1 | 0 | 0 |
+| **Total** | **18** | **18** | **0** | **0** |
 
 ---
 
@@ -270,4 +285,4 @@ Phase 2 從 **T11** 開始，T11 完成後確認營邦功能正常再繼續。
 
 ---
 
-*Last updated: 2026-03-05*
+*Last updated: 2026-03-10*

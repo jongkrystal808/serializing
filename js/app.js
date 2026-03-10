@@ -9,6 +9,8 @@ import {
   verifyDependencies,
   loadExcel,
   exportExcel,
+  exportBngExcel,
+  exportChgExcel,
   exportLunfeiExcel,
   generateSNList,
   generateLunfeiSNList,
@@ -17,7 +19,9 @@ import {
   getCurrentWeekNumber2Digits,
   getLunfeiWeekKey,
   buildLunfeiSN,
-  getTodayDateText
+  getTodayDateText,
+  generateBngSerialBundle,
+  generateChgExportBundle
 } from "./modules/excel.js";
 import {
   findWorkOrderRows,
@@ -28,6 +32,7 @@ import {
 } from "./modules/workOrder.js";
 import { HistoryModule } from "./modules/storage.js";
 import { supportsSourceBinding, getBoundFile, pickAndBindFile } from "./modules/sourceBinding.js";
+import { normalizeRangeText } from "./modules/utils.js";
 import {
   updateStatus,
   renderLoadResult,
@@ -35,6 +40,10 @@ import {
   renderSearchSuccess,
   renderLunfeiSearchNotFound,
   renderLunfeiSearchSuccess,
+  renderBngSearchNotFound,
+  renderBngSearchSuccess,
+  renderChgSearchNotFound,
+  renderChgSearchSuccess,
   renderSerialHistoryTable,
   renderSerialHistoryTableIn,
   bindPreviewTabs,
@@ -100,6 +109,58 @@ function setLunfeiLoading(isLoading, message = "") {
   }
 }
 
+function updateBngStatus(message, isError = false, isLoading = false) {
+  ui.bngStatus.textContent = message;
+  if (isError) {
+    ui.bngStatus.className = "error";
+    return;
+  }
+  if (isLoading) {
+    ui.bngStatus.className = "loading";
+    return;
+  }
+  ui.bngStatus.className = "";
+}
+
+function setBngLoading(isLoading, message = "") {
+  state.isLoading = isLoading;
+  ui.bngLoadingIndicator.classList.toggle("active", isLoading);
+  ui.bngBindBtn.disabled = isLoading;
+  ui.bngLoadBtn.disabled = isLoading;
+  ui.bngSearchInput.disabled = isLoading || state.bngRowData.length === 0;
+  ui.bngQueryBtn.disabled = isLoading || state.bngRowData.length === 0;
+  ui.bngExportBtn.disabled = true;
+  if (message) {
+    updateBngStatus(message, false, isLoading);
+  }
+}
+
+function updateChgStatus(message, isError = false, isLoading = false) {
+  ui.chgStatus.textContent = message;
+  if (isError) {
+    ui.chgStatus.className = "error";
+    return;
+  }
+  if (isLoading) {
+    ui.chgStatus.className = "loading";
+    return;
+  }
+  ui.chgStatus.className = "";
+}
+
+function setChgLoading(isLoading, message = "") {
+  state.isLoading = isLoading;
+  ui.chgLoadingIndicator.classList.toggle("active", isLoading);
+  ui.chgBindBtn.disabled = isLoading;
+  ui.chgLoadBtn.disabled = isLoading;
+  ui.chgSearchInput.disabled = isLoading || state.chgRowData.length === 0;
+  ui.chgQueryBtn.disabled = isLoading || state.chgRowData.length === 0;
+  ui.chgExportBtn.disabled = true;
+  if (message) {
+    updateChgStatus(message, false, isLoading);
+  }
+}
+
 function applyCustomerProfileUi() {
   const profile = getActiveCustomerProfile();
   if (getActiveCustomerKey() === "yingbang") {
@@ -114,6 +175,8 @@ function resetDataForCustomerSwitch() {
   state.generatedSNList = [];
   ui.historyPanel.hidden = true;
   ui.lunfeiHistoryPanel.hidden = true;
+  ui.bngHistoryPanel.hidden = true;
+  ui.chgHistoryPanel.hidden = true;
   ui.previewPanel.innerHTML = `
     <h2>預覽窗格</h2>
     <p>請先讀取 Excel，並輸入工單號後點擊「查詢/刷新」。</p>
@@ -123,15 +186,24 @@ function resetDataForCustomerSwitch() {
   ui.lunfeiSearchInput.disabled = state.lunfeiRowData.length === 0;
   ui.lunfeiQueryBtn.disabled = state.lunfeiRowData.length === 0;
   ui.lunfeiExportBtn.disabled = true;
+  ui.bngSearchInput.disabled = state.bngRowData.length === 0;
+  ui.bngQueryBtn.disabled = state.bngRowData.length === 0;
+  ui.bngExportBtn.disabled = true;
+  ui.chgSearchInput.disabled = state.chgRowData.length === 0;
+  ui.chgQueryBtn.disabled = state.chgRowData.length === 0;
+  ui.chgExportBtn.disabled = true;
 }
 
 function updateTabUi() {
   const active = getActiveCustomerKey();
-  const yingbangActive = active === "yingbang";
-  ui.yingbangTab.classList.toggle("active", yingbangActive);
-  ui.lunfeiTab.classList.toggle("active", !yingbangActive);
-  ui.yingbangWorkspace.hidden = !yingbangActive;
-  ui.lunfeiWorkspace.hidden = yingbangActive;
+  ui.yingbangTab.classList.toggle("active", active === "yingbang");
+  ui.lunfeiTab.classList.toggle("active", active === "lunfei");
+  ui.bngTab.classList.toggle("active", active === "bng");
+  ui.chgTab.classList.toggle("active", active === "chg");
+  ui.yingbangWorkspace.hidden = active !== "yingbang";
+  ui.lunfeiWorkspace.hidden = active !== "lunfei";
+  ui.bngWorkspace.hidden = active !== "bng";
+  ui.chgWorkspace.hidden = active !== "chg";
 }
 
 function switchCustomerTab(key) {
@@ -145,12 +217,20 @@ function switchCustomerTab(key) {
   }
   updateTabUi();
   applyCustomerProfileUi();
+  resetDataForCustomerSwitch();
   if (key === "yingbang") {
-    resetDataForCustomerSwitch();
     updateStatus(ui, `已切換客戶：${getActiveCustomerProfile().label}`);
     return;
   }
-  updateLunfeiStatus(`已切換客戶：${getActiveCustomerProfile().label}`);
+  if (key === "lunfei") {
+    updateLunfeiStatus(`已切換客戶：${getActiveCustomerProfile().label}`);
+    return;
+  }
+  if (key === "bng") {
+    updateBngStatus(`已切換客戶：${getActiveCustomerProfile().label}`);
+    return;
+  }
+  updateChgStatus(`已切換客戶：${getActiveCustomerProfile().label}`);
 }
 
 function getCurrentRowValue(columnCode) {
@@ -161,9 +241,31 @@ function getCurrentRowValue(columnCode) {
   return String(state.currentRow[key] ?? "").trim();
 }
 
+function getRowValueByHeaderCandidates(row, headers) {
+  if (!row || !Array.isArray(headers)) {
+    return "";
+  }
+  const rowKeys = Object.keys(row);
+  for (const header of headers) {
+    const foundKey = rowKeys.find((key) => String(key).trim().toLowerCase() === String(header).trim().toLowerCase());
+    if (foundKey) {
+      return String(row[foundKey] ?? "").trim();
+    }
+  }
+  return "";
+}
+
 function onCopyError() {
   if (getActiveCustomerKey() === "lunfei") {
     updateLunfeiStatus("複製失敗：瀏覽器不允許剪貼簿存取。", true);
+    return;
+  }
+  if (getActiveCustomerKey() === "bng") {
+    updateBngStatus("複製失敗：瀏覽器不允許剪貼簿存取。", true);
+    return;
+  }
+  if (getActiveCustomerKey() === "chg") {
+    updateChgStatus("複製失敗：瀏覽器不允許剪貼簿存取。", true);
     return;
   }
   updateStatus(ui, "複製失敗：瀏覽器不允許剪貼簿存取。", true);
@@ -207,7 +309,8 @@ function buildHistoryRecord(workOrder) {
   const yyyy = String(now.getFullYear());
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const dd = String(now.getDate()).padStart(2, "0");
-  return `${yyyy}-${mm}-${dd}-${workOrder}`;
+  const key = String(workOrder ?? "").trim();
+  return `${yyyy}-${mm}-${dd}-${key}`;
 }
 
 function onClearHistoryClick() {
@@ -240,6 +343,36 @@ function onLunfeiClearHistoryClick() {
   HistoryModule.clearWorkOrderHistory(mo, weekKey);
   updateLunfeiStatus(`已清空 MO ${mo} 的歷史序號。`);
   performLunfeiSearch();
+}
+
+function onBngClearHistoryClick() {
+  const workOrder = String(state.currentQuery ?? "").trim();
+  if (!workOrder) {
+    updateBngStatus("目前沒有可清空的工單歷史。", true);
+    return;
+  }
+  const confirmed = window.confirm(`確定清空工單 ${workOrder} 的歷史序號？`);
+  if (!confirmed) {
+    return;
+  }
+  HistoryModule.clearWorkOrderHistory(workOrder, workOrder);
+  updateBngStatus(`已清空工單 ${workOrder} 的歷史序號。`);
+  performBngSearch();
+}
+
+function onChgClearHistoryClick() {
+  const workOrder = String(state.currentQuery ?? "").trim();
+  if (!workOrder) {
+    updateChgStatus("目前沒有可清空的工單歷史。", true);
+    return;
+  }
+  const confirmed = window.confirm(`確定清空工單 ${workOrder} 的歷史序號？`);
+  if (!confirmed) {
+    return;
+  }
+  HistoryModule.clearWorkOrderHistory(workOrder, workOrder);
+  updateChgStatus(`已清空工單 ${workOrder} 的歷史序號。`);
+  performChgSearch();
 }
 
 function getLunfeiModelAlert(modelValue) {
@@ -324,6 +457,102 @@ function performLunfeiSearch() {
   updateLunfeiStatus(`查詢成功：${query}（命中 ${matchedRows.length} 筆）`);
 }
 
+function performBngSearch() {
+  if (state.bngRowData.length === 0) {
+    updateBngStatus("請先讀取超恩 Excel 檔案再查詢。", true);
+    return;
+  }
+
+  const query = ui.bngSearchInput.value.trim();
+  if (!query) {
+    updateBngStatus("請先輸入 MO。", true);
+    return;
+  }
+
+  const matchedRows = findRowsByColumnCode(state.bngRowData, "MO", query);
+  if (matchedRows.length === 0) {
+    state.currentRow = null;
+    state.currentQuery = query;
+    ui.bngExportBtn.disabled = true;
+    renderBngSearchNotFound(ui, query);
+    updateBngStatus("查無對應資料，請確認 MO 是否正確", true);
+    return;
+  }
+
+  state.currentRow = matchedRows[0];
+  const workOrder = String(
+    state.currentRow[resolveColumnKey(state.currentRow, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] ?? ""
+  ).trim();
+  state.currentQuery = workOrder;
+  const generationHistory = HistoryModule.getWorkOrderHistory(workOrder);
+  const normalizedRanges = {
+    mac: normalizeRangeText(state.currentRow[resolveColumnKey(state.currentRow, "MAC_RANGE") || CONFIG.COLUMNS.MAC_RANGE] ?? ""),
+    sn: normalizeRangeText(state.currentRow[resolveColumnKey(state.currentRow, "SN_RANGE") || CONFIG.COLUMNS.SN_RANGE] ?? ""),
+    uuid: String(state.currentRow[resolveColumnKey(state.currentRow, "UUID_RANGE") || CONFIG.COLUMNS.UUID_RANGE] ?? "").trim() === "0"
+      ? "無"
+      : normalizeRangeText(state.currentRow[resolveColumnKey(state.currentRow, "UUID_RANGE") || CONFIG.COLUMNS.UUID_RANGE] ?? "")
+  };
+  renderBngSearchSuccess(ui, {
+    row: state.currentRow,
+    query,
+    matchCount: matchedRows.length,
+    resolveColumnKey,
+    rowData: state.bngRowData,
+    generationHistory,
+    normalizedRanges
+  });
+  bindPreviewTabsIn(ui.bngPreviewPanel);
+  bindSheetCopyCellsIn(ui.bngPreviewPanel, onCopyError);
+  bindCopyButtonsIn(ui.bngPreviewPanel, onCopyError);
+  bindClearHistoryButtonIn(ui.bngPreviewPanel, "#btn-clear-history-bng", onBngClearHistoryClick);
+  ui.bngExportBtn.disabled = false;
+  updateBngStatus(`查詢成功：MO ${query}（命中 ${matchedRows.length} 筆）`);
+}
+
+function performChgSearch() {
+  if (state.chgRowData.length === 0) {
+    updateChgStatus("請先讀取 KOYA Excel 檔案再查詢。", true);
+    return;
+  }
+
+  const query = ui.chgSearchInput.value.trim();
+  if (!query) {
+    updateChgStatus("請先輸入工單。", true);
+    return;
+  }
+
+  const matchedRows = findRowsByColumnCode(state.chgRowData, "WORK_ORDER", query);
+  if (matchedRows.length === 0) {
+    state.currentRow = null;
+    state.currentQuery = query;
+    ui.chgExportBtn.disabled = true;
+    renderChgSearchNotFound(ui, query);
+    updateChgStatus("查無對應資料，請確認工單是否正確", true);
+    return;
+  }
+
+  state.currentRow = matchedRows[0];
+  const workOrder = String(
+    state.currentRow[resolveColumnKey(state.currentRow, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] ?? ""
+  ).trim();
+  state.currentQuery = workOrder;
+  const generationHistory = HistoryModule.getWorkOrderHistory(workOrder);
+  renderChgSearchSuccess(ui, {
+    row: state.currentRow,
+    query,
+    matchCount: matchedRows.length,
+    resolveColumnKey,
+    rowData: state.chgRowData,
+    generationHistory
+  });
+  bindPreviewTabsIn(ui.chgPreviewPanel);
+  bindSheetCopyCellsIn(ui.chgPreviewPanel, onCopyError);
+  bindCopyButtonsIn(ui.chgPreviewPanel, onCopyError);
+  bindClearHistoryButtonIn(ui.chgPreviewPanel, "#btn-clear-history-chg", onChgClearHistoryClick);
+  ui.chgExportBtn.disabled = false;
+  updateChgStatus(`查詢成功：工單 ${query}（命中 ${matchedRows.length} 筆）`);
+}
+
 function openSerialHistoryPanel() {
   const entries = HistoryModule.getSerialHistoryEntries();
   ui.historyPanel.hidden = false;
@@ -336,6 +565,20 @@ function openLunfeiSerialHistoryPanel() {
   ui.lunfeiHistoryPanel.hidden = false;
   renderSerialHistoryTableIn(ui.lunfeiHistoryPanel, entries, "週別 key");
   bindHistoryResetButtonsIn(ui.lunfeiHistoryPanel, onLunfeiResetSerialHistoryKey);
+}
+
+function openBngSerialHistoryPanel() {
+  const entries = HistoryModule.getSerialHistoryEntries();
+  ui.bngHistoryPanel.hidden = false;
+  renderSerialHistoryTableIn(ui.bngHistoryPanel, entries, "工單");
+  bindHistoryResetButtonsIn(ui.bngHistoryPanel, onBngResetSerialHistoryKey);
+}
+
+function openChgSerialHistoryPanel() {
+  const entries = HistoryModule.getSerialHistoryEntries();
+  ui.chgHistoryPanel.hidden = false;
+  renderSerialHistoryTableIn(ui.chgHistoryPanel, entries, "工單");
+  bindHistoryResetButtonsIn(ui.chgHistoryPanel, onChgResetSerialHistoryKey);
 }
 
 function onResetSerialHistoryKey(historyKey) {
@@ -374,9 +617,53 @@ function onLunfeiResetSerialHistoryKey(historyKey) {
   openLunfeiSerialHistoryPanel();
 }
 
+function onBngResetSerialHistoryKey(historyKey) {
+  const key = String(historyKey ?? "").trim();
+  if (!key) {
+    return;
+  }
+  const confirmed = window.confirm(`確定重置 ${key} 的流水號歷史？`);
+  if (!confirmed) {
+    return;
+  }
+  const success = HistoryModule.resetSerialHistoryKey(key);
+  if (success) {
+    updateBngStatus(`已重置 ${key} 的流水號歷史。`);
+  } else {
+    updateBngStatus(`找不到 ${key} 的歷史資料。`, true);
+  }
+  openBngSerialHistoryPanel();
+}
+
+function onChgResetSerialHistoryKey(historyKey) {
+  const key = String(historyKey ?? "").trim();
+  if (!key) {
+    return;
+  }
+  const confirmed = window.confirm(`確定重置 ${key} 的流水號歷史？`);
+  if (!confirmed) {
+    return;
+  }
+  const success = HistoryModule.resetSerialHistoryKey(key);
+  if (success) {
+    updateChgStatus(`已重置 ${key} 的流水號歷史。`);
+  } else {
+    updateChgStatus(`找不到 ${key} 的歷史資料。`, true);
+  }
+  openChgSerialHistoryPanel();
+}
+
 function performSearch() {
-  if (getActiveCustomerKey() !== "yingbang") {
+  if (getActiveCustomerKey() === "lunfei") {
     performLunfeiSearch();
+    return;
+  }
+  if (getActiveCustomerKey() === "bng") {
+    performBngSearch();
+    return;
+  }
+  if (getActiveCustomerKey() === "chg") {
+    performChgSearch();
     return;
   }
 
@@ -447,6 +734,74 @@ async function processExcelFile(file) {
     return;
   }
 
+  if (getActiveCustomerKey() === "bng") {
+    setBngLoading(true, `讀取中：${file.name} ...`);
+    try {
+      const rows = await loadExcel(file);
+      state.bngRowData = rows;
+      state.currentRow = null;
+      state.currentQuery = "";
+      state.generatedSNList = [];
+      ui.bngPreviewPanel.innerHTML = `
+        <h2>超恩預覽窗格</h2>
+        <p>來源檔案：${file.name}</p>
+        <p>已載入超恩出貨 ${rows.length} 筆資料。</p>
+      `;
+      ui.bngHistoryPanel.hidden = true;
+      updateBngStatus(`已載入超恩出貨 ${rows.length} 筆資料。`);
+      ui.bngSearchInput.disabled = rows.length === 0;
+      ui.bngQueryBtn.disabled = rows.length === 0;
+      ui.bngExportBtn.disabled = true;
+    } catch (error) {
+      state.bngRowData = [];
+      state.currentRow = null;
+      state.currentQuery = "";
+      state.generatedSNList = [];
+      updateBngStatus(`讀取失敗：${error.message}`, true);
+      ui.bngPreviewPanel.innerHTML = `
+        <h2>超恩預覽窗格</h2>
+        <div class="error-box">讀取超恩 Excel 失敗：${error.message}</div>
+      `;
+    } finally {
+      setBngLoading(false);
+    }
+    return;
+  }
+
+  if (getActiveCustomerKey() === "chg") {
+    setChgLoading(true, `讀取中：${file.name} ...`);
+    try {
+      const rows = await loadExcel(file);
+      state.chgRowData = rows;
+      state.currentRow = null;
+      state.currentQuery = "";
+      state.generatedSNList = [];
+      ui.chgPreviewPanel.innerHTML = `
+        <h2>KOYA 預覽窗格</h2>
+        <p>來源檔案：${file.name}</p>
+        <p>已載入 KOYA 出貨 ${rows.length} 筆資料。</p>
+      `;
+      ui.chgHistoryPanel.hidden = true;
+      updateChgStatus(`已載入 KOYA 出貨 ${rows.length} 筆資料。`);
+      ui.chgSearchInput.disabled = rows.length === 0;
+      ui.chgQueryBtn.disabled = rows.length === 0;
+      ui.chgExportBtn.disabled = true;
+    } catch (error) {
+      state.chgRowData = [];
+      state.currentRow = null;
+      state.currentQuery = "";
+      state.generatedSNList = [];
+      updateChgStatus(`讀取失敗：${error.message}`, true);
+      ui.chgPreviewPanel.innerHTML = `
+        <h2>KOYA 預覽窗格</h2>
+        <div class="error-box">讀取 KOYA Excel 失敗：${error.message}</div>
+      `;
+    } finally {
+      setChgLoading(false);
+    }
+    return;
+  }
+
   setLoading(true, `讀取中：${file.name} ...`);
   try {
     const rows = await loadExcel(file);
@@ -493,26 +848,64 @@ async function onLunfeiFileSelected(event) {
   }
 }
 
-async function bindSourceFile() {
-  if (getActiveCustomerKey() !== "yingbang") {
-    // lunfei binding uses same shared flow
+async function onBngFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  try {
+    await processExcelFile(file);
+  } finally {
+    ui.bngFileInput.value = "";
   }
+}
 
+async function onChgFileSelected(event) {
+  const file = event.target.files && event.target.files[0];
+  try {
+    await processExcelFile(file);
+  } finally {
+    ui.chgFileInput.value = "";
+  }
+}
+
+async function bindSourceFile() {
   if (!supportsSourceBinding()) {
-    updateStatus(ui, "目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
+    if (getActiveCustomerKey() === "lunfei") {
+      updateLunfeiStatus("目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
+    } else if (getActiveCustomerKey() === "bng") {
+      updateBngStatus("目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
+    } else if (getActiveCustomerKey() === "chg") {
+      updateChgStatus("目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
+    } else {
+      updateStatus(ui, "目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
+    }
     return;
   }
 
   try {
     const pickedFile = await pickAndBindFile();
     if (pickedFile) {
-      updateStatus(ui, `來源檔已綁定：${pickedFile.name}`);
+      if (getActiveCustomerKey() === "lunfei") {
+        updateLunfeiStatus(`來源檔已綁定：${pickedFile.name}`);
+      } else if (getActiveCustomerKey() === "bng") {
+        updateBngStatus(`來源檔已綁定：${pickedFile.name}`);
+      } else if (getActiveCustomerKey() === "chg") {
+        updateChgStatus(`來源檔已綁定：${pickedFile.name}`);
+      } else {
+        updateStatus(ui, `來源檔已綁定：${pickedFile.name}`);
+      }
     }
   } catch (error) {
     if (error?.name === "AbortError") {
       return;
     }
-    updateStatus(ui, `綁定來源失敗：${error.message || error}`, true);
+    if (getActiveCustomerKey() === "lunfei") {
+      updateLunfeiStatus(`綁定來源失敗：${error.message || error}`, true);
+    } else if (getActiveCustomerKey() === "bng") {
+      updateBngStatus(`綁定來源失敗：${error.message || error}`, true);
+    } else if (getActiveCustomerKey() === "chg") {
+      updateChgStatus(`綁定來源失敗：${error.message || error}`, true);
+    } else {
+      updateStatus(ui, `綁定來源失敗：${error.message || error}`, true);
+    }
   }
 }
 
@@ -520,6 +913,10 @@ async function loadTable() {
   if (!supportsSourceBinding()) {
     if (getActiveCustomerKey() === "lunfei") {
       ui.lunfeiFileInput.click();
+    } else if (getActiveCustomerKey() === "bng") {
+      ui.bngFileInput.click();
+    } else if (getActiveCustomerKey() === "chg") {
+      ui.chgFileInput.click();
     } else {
       ui.fileInput.click();
     }
@@ -534,6 +931,10 @@ async function loadTable() {
     }
     if (getActiveCustomerKey() === "lunfei") {
       ui.lunfeiFileInput.click();
+    } else if (getActiveCustomerKey() === "bng") {
+      ui.bngFileInput.click();
+    } else if (getActiveCustomerKey() === "chg") {
+      ui.chgFileInput.click();
     } else {
       ui.fileInput.click();
     }
@@ -543,6 +944,10 @@ async function loadTable() {
     }
     if (getActiveCustomerKey() === "lunfei") {
       ui.lunfeiFileInput.click();
+    } else if (getActiveCustomerKey() === "bng") {
+      ui.bngFileInput.click();
+    } else if (getActiveCustomerKey() === "chg") {
+      ui.chgFileInput.click();
     } else {
       ui.fileInput.click();
     }
@@ -562,13 +967,17 @@ function onExportClick() {
     try {
       const mo = state.currentQuery || String(state.currentRow[resolveColumnKey(state.currentRow, "MO") || CONFIG.COLUMNS.MO] ?? "").trim();
       const qty = resolveQtyByPairedSlash(state.currentRow, mo, "MO", "QTY");
+      const workOrder = String(
+        state.currentRow[resolveColumnKey(state.currentRow, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] ?? ""
+      ).trim();
       const snList = generateLunfeiSNList(mo, qty);
       state.generatedSNList = snList;
+      HistoryModule.appendWorkOrderHistory(mo, buildHistoryRecord(workOrder || mo));
       const boxRecord = {
         pn: state.currentRow[resolveColumnKey(state.currentRow, "PN") || CONFIG.COLUMNS.PN] || "",
         processWo: state.currentRow[resolveColumnKey(state.currentRow, "PROCESS_WO") || CONFIG.COLUMNS.PROCESS_WO] || "",
         pcba: state.currentRow[resolveColumnKey(state.currentRow, "PCBA") || CONFIG.COLUMNS.PCBA] || "",
-        workOrder: state.currentRow[resolveColumnKey(state.currentRow, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] || "",
+        workOrder: workOrder,
         model: state.currentRow[resolveColumnKey(state.currentRow, "MODEL") || CONFIG.COLUMNS.MODEL] || "",
         dateText: getTodayDateText()
       };
@@ -576,6 +985,96 @@ function onExportClick() {
       updateLunfeiStatus(`已完成匯出：${filename}（SN ${snList.length} 筆）`);
     } catch (error) {
       updateLunfeiStatus(`生成失敗：${error.message}`, true);
+    }
+    return;
+  }
+
+  if (getActiveCustomerKey() === "bng") {
+    if (!state.currentRow) {
+      updateBngStatus("請先查詢 MO 後再生成。", true);
+      return;
+    }
+    try {
+      const workOrder = String(
+        state.currentRow[resolveColumnKey(state.currentRow, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] ?? ""
+      ).trim();
+      const mo = String(
+        state.currentRow[resolveColumnKey(state.currentRow, "MO") || CONFIG.COLUMNS.MO] ?? ""
+      ).trim();
+      const model = String(state.currentRow[resolveColumnKey(state.currentRow, "MODEL") || CONFIG.COLUMNS.MODEL] ?? "");
+      const systronPn = getRowValueByHeaderCandidates(state.currentRow, ["Model", "MODEL"]) || model;
+      const partNo = String(state.currentRow[resolveColumnKey(state.currentRow, "PART_NO") || CONFIG.COLUMNS.PART_NO] ?? "");
+      const qty = Number(state.currentRow[resolveColumnKey(state.currentRow, "QTY") || CONFIG.COLUMNS.QTY] ?? 0);
+      const macRange = String(state.currentRow[resolveColumnKey(state.currentRow, "MAC_RANGE") || CONFIG.COLUMNS.MAC_RANGE] ?? "");
+      const macQty = Number(state.currentRow[resolveColumnKey(state.currentRow, "MAC_QTY") || CONFIG.COLUMNS.MAC_QTY] ?? 0);
+      const snRange = String(state.currentRow[resolveColumnKey(state.currentRow, "SN_RANGE") || CONFIG.COLUMNS.SN_RANGE] ?? "");
+      const uuidRange = String(state.currentRow[resolveColumnKey(state.currentRow, "UUID_RANGE") || CONFIG.COLUMNS.UUID_RANGE] ?? "");
+      const bios = String(state.currentRow[resolveColumnKey(state.currentRow, "BIOS") || CONFIG.COLUMNS.BIOS] ?? "");
+      const fw = String(state.currentRow[resolveColumnKey(state.currentRow, "FW") || CONFIG.COLUMNS.FW] ?? "");
+      const dateText = getTodayDateText();
+
+      const bundle = generateBngSerialBundle({
+        workOrder,
+        model,
+        systronPn,
+        partNo,
+        qty,
+        macRange,
+        macQty,
+        snRange,
+        uuidRange,
+        bios,
+        fw,
+        dateText
+      });
+      state.generatedSNList = bundle.snRows;
+      HistoryModule.updateHistory(workOrder, bundle.generated.snList.length);
+      HistoryModule.appendWorkOrderHistory(workOrder, buildHistoryRecord(workOrder));
+      const filename = exportBngExcel(bundle, workOrder || mo);
+      updateBngStatus(
+        `已完成匯出：${filename}（SN ${bundle.generated.snList.length} 筆，MAC ${bundle.generated.macList.length} 筆）`
+      );
+      performBngSearch();
+    } catch (error) {
+      updateBngStatus(`生成失敗：${error.message}`, true);
+    }
+    return;
+  }
+
+  if (getActiveCustomerKey() === "chg") {
+    if (!state.currentRow) {
+      updateChgStatus("請先查詢工單後再生成。", true);
+      return;
+    }
+    try {
+      const workOrder = String(
+        state.currentRow[resolveColumnKey(state.currentRow, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] ?? ""
+      ).trim();
+      const mo = workOrder;
+      const pn = String(state.currentRow[resolveColumnKey(state.currentRow, "PN") || CONFIG.COLUMNS.PN] ?? "");
+      const fullPn = String(state.currentRow[resolveColumnKey(state.currentRow, "FULL_PN") || CONFIG.COLUMNS.FULL_PN] ?? "");
+      const model = String(state.currentRow[resolveColumnKey(state.currentRow, "MODEL") || CONFIG.COLUMNS.MODEL] ?? "");
+      const po = String(state.currentRow[resolveColumnKey(state.currentRow, "PO") || CONFIG.COLUMNS.PO] ?? "");
+      const boxQty = String(state.currentRow[resolveColumnKey(state.currentRow, "BOX_QTY") || CONFIG.COLUMNS.BOX_QTY] ?? "");
+      const labelQty = Number(state.currentRow[resolveColumnKey(state.currentRow, "QTY") || CONFIG.COLUMNS.QTY] ?? 0);
+
+      const bundle = generateChgExportBundle({
+        workOrder,
+        pn,
+        fullPn,
+        model,
+        po,
+        boxQty,
+        labelQty
+      });
+      state.generatedSNList = bundle.snRows;
+      HistoryModule.updateHistory(workOrder, bundle.generated.labelQty);
+      HistoryModule.appendWorkOrderHistory(workOrder, buildHistoryRecord(workOrder));
+      const filename = exportChgExcel(bundle, workOrder || mo);
+      updateChgStatus(`已完成匯出：${filename}（標籤 ${bundle.generated.labelQty} 筆）`);
+      performChgSearch();
+    } catch (error) {
+      updateChgStatus(`生成失敗：${error.message}`, true);
     }
     return;
   }
@@ -617,6 +1116,8 @@ function onExportClick() {
 function initEvents() {
   ui.yingbangTab.addEventListener("click", () => switchCustomerTab("yingbang"));
   ui.lunfeiTab.addEventListener("click", () => switchCustomerTab("lunfei"));
+  ui.bngTab.addEventListener("click", () => switchCustomerTab("bng"));
+  ui.chgTab.addEventListener("click", () => switchCustomerTab("chg"));
   ui.bindBtn.addEventListener("click", bindSourceFile);
   ui.loadBtn.addEventListener("click", loadTable);
   ui.lunfeiBindBtn.addEventListener("click", async () => {
@@ -631,11 +1132,39 @@ function initEvents() {
     switchCustomerTab("lunfei");
     openLunfeiSerialHistoryPanel();
   });
+  ui.bngBindBtn.addEventListener("click", async () => {
+    switchCustomerTab("bng");
+    await bindSourceFile();
+  });
+  ui.bngLoadBtn.addEventListener("click", async () => {
+    switchCustomerTab("bng");
+    await loadTable();
+  });
+  ui.bngHistoryBtn.addEventListener("click", () => {
+    switchCustomerTab("bng");
+    openBngSerialHistoryPanel();
+  });
+  ui.chgBindBtn.addEventListener("click", async () => {
+    switchCustomerTab("chg");
+    await bindSourceFile();
+  });
+  ui.chgLoadBtn.addEventListener("click", async () => {
+    switchCustomerTab("chg");
+    await loadTable();
+  });
+  ui.chgHistoryBtn.addEventListener("click", () => {
+    switchCustomerTab("chg");
+    openChgSerialHistoryPanel();
+  });
   ui.historyBtn.addEventListener("click", openSerialHistoryPanel);
   ui.queryBtn.addEventListener("click", performSearch);
   ui.lunfeiQueryBtn.addEventListener("click", performLunfeiSearch);
+  ui.bngQueryBtn.addEventListener("click", performBngSearch);
+  ui.chgQueryBtn.addEventListener("click", performChgSearch);
   ui.exportBtn.addEventListener("click", onExportClick);
   ui.lunfeiExportBtn.addEventListener("click", onExportClick);
+  ui.bngExportBtn.addEventListener("click", onExportClick);
+  ui.chgExportBtn.addEventListener("click", onExportClick);
   ui.searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -648,8 +1177,22 @@ function initEvents() {
       performLunfeiSearch();
     }
   });
+  ui.bngSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      performBngSearch();
+    }
+  });
+  ui.chgSearchInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      performChgSearch();
+    }
+  });
   ui.fileInput.addEventListener("change", onFileSelected);
   ui.lunfeiFileInput.addEventListener("change", onLunfeiFileSelected);
+  ui.bngFileInput.addEventListener("change", onBngFileSelected);
+  ui.chgFileInput.addEventListener("change", onChgFileSelected);
 }
 
 async function main() {

@@ -75,6 +75,40 @@ function renderHistoryPane(workOrderHistory) {
   `;
 }
 
+function renderPreviewGroup(title, items) {
+  return `
+    <section class="card">
+      <h3 class="section-title">${escapeHtml(title)}</h3>
+      <div class="preview-grid">
+        ${items.join("")}
+      </div>
+    </section>
+  `;
+}
+
+// 【用途】超恩預覽：渲染緊湊型分區卡片，避免多分區時版面過度拉長
+function renderBngPreviewGroup(title, items) {
+  return `
+    <section class="bng-preview-group">
+      <h3 class="section-title">${escapeHtml(title)}</h3>
+      <div class="preview-grid bng-preview-grid">
+        ${items.join("")}
+      </div>
+    </section>
+  `;
+}
+
+// 【用途】超恩 BOX Model 顯示：僅保留機種名稱中 " 1." 之前的內容
+function formatBngModelForBox(modelValue) {
+  const text = String(modelValue ?? "").trim();
+  const marker = " 1.";
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex < 0) {
+    return text;
+  }
+  return text.slice(0, markerIndex).trim();
+}
+
 export function updateStatus(ui, message, isError = false, isLoading = false) {
   ui.status.textContent = message;
   if (isError) {
@@ -375,6 +409,167 @@ export function renderLunfeiSearchSuccess(ui, args) {
       <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
       <div class="history-actions">
         <button type="button" class="btn-secondary" id="btn-clear-history-lunfei">清空歷史序號</button>
+      </div>
+    </div>` : ""}
+  `;
+}
+
+export function renderBngSearchNotFound(ui, query) {
+  if (!ui.bngPreviewPanel) {
+    return;
+  }
+  ui.bngPreviewPanel.innerHTML = `
+    <h2>超恩預覽窗格</h2>
+    <div class="error-box">查無對應資料，請確認 MO 是否正確（${escapeHtml(query)}）</div>
+  `;
+}
+
+// 【用途】超恩查詢成功後渲染分區預覽（SN/MAC/UUID/FW&BIOS/BOX）
+export function renderBngSearchSuccess(ui, args) {
+  const {
+    row,
+    query,
+    matchCount,
+    resolveColumnKey,
+    rowData,
+    generationHistory,
+    normalizedRanges
+  } = args;
+  const date = row[resolveColumnKey(row, "DATE") || CONFIG.COLUMNS.DATE] || "";
+  const workOrder = row[resolveColumnKey(row, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] || "";
+  const model = row[resolveColumnKey(row, "MODEL") || CONFIG.COLUMNS.MODEL] || "";
+  const partNo = row[resolveColumnKey(row, "PART_NO") || CONFIG.COLUMNS.PART_NO] || "";
+  const qty = row[resolveColumnKey(row, "QTY") || CONFIG.COLUMNS.QTY] || "";
+  const macRange = normalizedRanges?.mac || row[resolveColumnKey(row, "MAC_RANGE") || CONFIG.COLUMNS.MAC_RANGE] || "";
+  const macQty = row[resolveColumnKey(row, "MAC_QTY") || CONFIG.COLUMNS.MAC_QTY] || "";
+  const macBoardQty = row[resolveColumnKey(row, "MAC_BOARD_QTY") || CONFIG.COLUMNS.MAC_BOARD_QTY] || "";
+  const snRange = normalizedRanges?.sn || row[resolveColumnKey(row, "SN_RANGE") || CONFIG.COLUMNS.SN_RANGE] || "";
+  const uuidRange = normalizedRanges?.uuid || row[resolveColumnKey(row, "UUID_RANGE") || CONFIG.COLUMNS.UUID_RANGE] || "";
+  const bios = row[resolveColumnKey(row, "BIOS") || CONFIG.COLUMNS.BIOS] || "";
+  const fw = row[resolveColumnKey(row, "FW") || CONFIG.COLUMNS.FW] || "";
+  const boxModel = formatBngModelForBox(model);
+  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const snGroup = renderBngPreviewGroup("SN 分區", [
+    renderPreviewItem("序號區間", snRange, true),
+    renderPreviewItem("生產數量", qty, true)
+  ]);
+  const macGroup = renderBngPreviewGroup("MAC 分區", [
+    renderPreviewItem("MAC Address", macRange, true),
+    renderPreviewItem("MAC數量", macQty, true),
+    renderPreviewItem("MAC板子用量數量", macBoardQty, true)
+  ]);
+  const uuidGroup = renderBngPreviewGroup("UUID 分區", [
+    renderPreviewItem("UUID區間", uuidRange, true),
+    renderPreviewItem("生產數量", qty, true)
+  ]);
+  const fwBiosGroup = renderBngPreviewGroup("FW&BIOS 分區", [
+    renderPreviewItem("新版BIOS(以此為主)", bios, true),
+    renderPreviewItem("IGN FW版本", fw, true)
+  ]);
+  const boxGroup = renderBngPreviewGroup("BOX 分區", [
+    renderPreviewItem("工單", workOrder, true),
+    renderPreviewItem("機種名稱", boxModel, true),
+    renderPreviewItem("機種料號", partNo, true),
+    renderPreviewItem("序號區間", snRange, true),
+    renderPreviewItem("Model", boxModel, true)
+  ]);
+
+  ui.bngPreviewPanel.innerHTML = `
+    <h2>超恩預覽窗格</h2>
+    <p>查詢 MO：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
+    <div class="preview-headline">
+      <p class="preview-title">${escapeHtml(model)}</p>
+      <p class="preview-subtitle">機種料號：${escapeHtml(partNo)}｜日期：${escapeHtml(date)}</p>
+    </div>
+    <div class="preview-tabs">
+      <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
+      <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
+      ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
+    </div>
+    <div class="preview-pane active" data-pane="preview">
+      <div class="bng-preview-groups">
+        ${snGroup}
+        ${macGroup}
+        ${uuidGroup}
+        ${fwBiosGroup}
+        ${boxGroup}
+      </div>
+    </div>
+    <div class="preview-pane" data-pane="sheet">
+      ${renderSheetContentPane(rowData)}
+    </div>
+    ${hasHistory ? `<div class="preview-pane" data-pane="history">
+      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
+      <div class="history-actions">
+        <button type="button" class="btn-secondary" id="btn-clear-history-bng">清空歷史序號</button>
+      </div>
+    </div>` : ""}
+  `;
+}
+
+export function renderChgSearchNotFound(ui, query) {
+  if (!ui.chgPreviewPanel) {
+    return;
+  }
+  ui.chgPreviewPanel.innerHTML = `
+    <h2>KOYA 預覽窗格</h2>
+    <div class="error-box">查無對應資料，請確認工單是否正確（${escapeHtml(query)}）</div>
+  `;
+}
+
+export function renderChgSearchSuccess(ui, args) {
+  const {
+    row,
+    query,
+    matchCount,
+    resolveColumnKey,
+    rowData,
+    generationHistory
+  } = args;
+  const workOrder = row[resolveColumnKey(row, "WORK_ORDER") || CONFIG.COLUMNS.WORK_ORDER] || "";
+  const model = row[resolveColumnKey(row, "MODEL") || CONFIG.COLUMNS.MODEL] || "";
+  const pn = row[resolveColumnKey(row, "PN") || CONFIG.COLUMNS.PN] || "";
+  const po = row[resolveColumnKey(row, "PO") || CONFIG.COLUMNS.PO] || "";
+  const batch = row[resolveColumnKey(row, "BATCH") || CONFIG.COLUMNS.BATCH] || "";
+  const qty = row[resolveColumnKey(row, "QTY") || CONFIG.COLUMNS.QTY] || "";
+  const boxQty = row[resolveColumnKey(row, "BOX_QTY") || CONFIG.COLUMNS.BOX_QTY] || "";
+  const demand = row[resolveColumnKey(row, "DEMAND") || CONFIG.COLUMNS.DEMAND] || "";
+  const tailQty = row[resolveColumnKey(row, "TAIL_QTY") || CONFIG.COLUMNS.TAIL_QTY] || "";
+  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+
+  const labelGroup = renderPreviewGroup("Label 分區", [
+    renderPreviewItem("PN", pn, true),
+    renderPreviewItem("小張貼紙", qty, true)
+  ]);
+  const boxLabelGroup = renderPreviewGroup("Box Label 分區", [
+    renderPreviewItem("滿箱數量", boxQty, true),
+    renderPreviewItem("需求", demand, true),
+    renderPreviewItem("尾數數量", tailQty, true)
+  ]);
+
+  ui.chgPreviewPanel.innerHTML = `
+    <h2>KOYA 預覽窗格</h2>
+    <p>查詢工單：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
+    <div class="preview-headline">
+      <p class="preview-title">${escapeHtml(model)}</p>
+      <p class="preview-subtitle">工單：${escapeHtml(workOrder)}｜PO：${escapeHtml(po)}｜批量：${escapeHtml(batch)}</p>
+    </div>
+    <div class="preview-tabs">
+      <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
+      <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
+      ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
+    </div>
+    <div class="preview-pane active" data-pane="preview">
+      ${labelGroup}
+      ${boxLabelGroup}
+    </div>
+    <div class="preview-pane" data-pane="sheet">
+      ${renderSheetContentPane(rowData)}
+    </div>
+    ${hasHistory ? `<div class="preview-pane" data-pane="history">
+      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
+      <div class="history-actions">
+        <button type="button" class="btn-secondary" id="btn-clear-history-chg">清空歷史序號</button>
       </div>
     </div>` : ""}
   `;

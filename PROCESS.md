@@ -1,7 +1,7 @@
 # Development Process
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.1.1
+**Version:** 0.2.0
 **Last Updated:** 2026-03-05
 
 ---
@@ -26,6 +26,8 @@
         ↓
 對話結束後
   └─ [ POST-SESSION CHECKLIST ]
+        ↓
+        └─ [ GIT COMMIT ]   ← 每完成一個改動就 commit 一次
         ↓
 遇到問題時
   └─ [ DEBUG FLOW ]
@@ -106,10 +108,100 @@
 - [ ] 未解決的 Bug → 記錄症狀 + 已嘗試方法，狀態留 `🔴 Open`
 - [ ] 新發現的 Known Limitation → 加入 `⚠️ Known Limitations` 表格
 
-###  4. 更新 architecture.md（若有專案功能有進行修改）
-
-### 5. 快速備忘（可選）
+### 4. 快速備忘（可選）
 - [ ] 在本文件底部的 `📝 Session Notes` 區記錄本次重要發現
+
+### 5. Git Commit ✦ 必做
+- [ ] 確認以上步驟（1~3）全部完成後才 commit
+- [ ] 執行 git commit（格式見下方 **Git Commit Guidelines**）
+
+---
+
+## 🗂️ Git Commit Guidelines
+
+> **原則：每完成一個 Task（或一個有意義的改動）就 commit 一次。**
+> 不要累積多個 Task 才一次 commit，方便追蹤與回溯。
+
+### Commit 時機
+| 時機 | 說明 |
+|------|------|
+| ✅ Task 完成且 Acceptance Criteria 驗收通過 | 標準 commit |
+| 🐛 Bug 修復完成 | 修 Bug commit |
+| 📝 僅文件更新（.md 檔） | 文件 commit |
+| 🔧 小幅調整（樣式、文字）但不影響功能 | 小修 commit |
+
+### Commit Message 格式
+
+```
+<type>(<scope>): <短描述>
+
+[選填：補充說明]
+```
+
+**type 對照表：**
+| type | 使用時機 |
+|------|----------|
+| `feat` | 新增功能（完成一個 Task） |
+| `fix` | 修復 Bug |
+| `refactor` | 重構（不新增功能、不修 Bug） |
+| `docs` | 僅更新文件（.md 檔） |
+| `style` | 樣式調整，不影響邏輯 |
+| `chore` | 雜項（更新 CDN 版本等） |
+
+**scope 對照表：**
+| scope | 說明 |
+|-------|------|
+| `yingbang` | 只影響營邦客戶功能 |
+| `lonfly` | 只影響倫飛客戶功能 |
+| `core` | 影響共用底層模組 |
+| `ui` | 僅 UI / 樣式變更 |
+| `docs` | 文件變更 |
+
+### Commit Message 範例
+
+```bash
+# 完成一個 Task
+git commit -m "feat(lonfly): 新增倫飛週流水號 SN 生成邏輯 (T14)"
+
+# 修 Bug
+git commit -m "fix(lonfly): 修正跨週流水號未重置問題"
+
+# 重構
+git commit -m "refactor(core): 多客戶 Tab 架構重構，遷移營邦至 CUSTOMERS CONFIG (T11)"
+
+# 文件更新
+git commit -m "docs: 更新 ARCHITECTURE.md 新增倫飛 Data Schema"
+
+# 同時更新程式碼與文件（推薦：程式碼與文件一起 commit）
+git commit -m "feat(lonfly): 雙 Sheet Excel 輸出 (T15)
+
+- SN sheet：依 Q'ty 數量生成序號列
+- box sheet：P/N / 加工WO# / 對應PCBA / 工單 / Model / 日期
+- 日期格式 yyyy/mm/dd"
+```
+
+### 每次 Commit 包含的檔案
+```bash
+git add index.html          # 程式碼主檔（幾乎每次都要）
+git add TASK.md             # 更新完成狀態後一起 commit
+git add ARCHITECTURE.md     # 若本次有架構決策變更
+git add DEBUG.md            # 若本次有 Bug 記錄更新
+```
+
+### 完整 Commit 指令流程
+```bash
+# 1. 確認目前變更
+git status
+
+# 2. 加入要 commit 的檔案
+git add index.html TASK.md
+
+# 3. Commit（帶清楚的 message）
+git commit -m "feat(yingbang): 新增表格內容分頁與儲存格複製 (T08)"
+
+# 4. 推送（若有遠端 repo）
+git push
+```
 
 ---
 
@@ -173,41 +265,23 @@ Console 錯誤：
 
 ---
 
-## 🖥️ Environment Notes（工具環境備註）
-
-- [ ] 本機環境 `rg`（ripgrep）不可用；之後檔案/文字搜尋請直接使用 PowerShell（`Get-ChildItem`、`Select-String`）。
-
----
-
 ## 📝 Session Notes（開發紀錄）
 
 > 每次對話結束後，可在此記錄重要發現、決策變更、或下次要注意的事項
 
 ---
 
+### 2026-03-05 — 多客戶架構重構
+- 更新 ARCHITECTURE.md 至 v0.2.0（多客戶 Tab + CUSTOMERS CONFIG + 倫飛）
+- 更新 TASK.md 新增 Phase 2 T11~T16
+- 新增 Git Commit Guidelines 至 PROCESS.md
+- 下一步：開新對話執行 T11（多客戶骨架重構）
+
 ### 2026-03-04 — 專案初始化
 - 完成 ARCHITECTURE.md、PROJECT.md、TASK.md、DEBUG.md、PROCESS.md
 - 尚未開始實作 index.html
 - 下一步：開新對話執行 T01
 
-### 2026-03-05 — 與 ARCHITECTURE 對齊修正
-- 補齊資料來源綁定流程（File System Access API + IndexedDB），UI 新增「綁定來源」按鈕
-- 預覽窗格補齊「表格內容 / 生成歷史」分頁與「清空歷史序號」按鈕
-- HistoryModule 補齊工單生成歷史儲存與清除（`sn_generation_history_by_work_order`）
-- 匯出欄位對齊為 `SN / Datecode / PN` 三欄，並保留工單查詢與 `工單*數量` 邏輯
-- 清理 `console.log`，避免上線殘留 debug 訊息
-
-### 2026-03-05 — 多客戶模板化更新
-- 將客戶差異抽象為 `parseRules / serialRule / exportStrategy` 三種策略
-- 匯出 Excel 欄位與內容改為策略化（不再只靠固定欄位）
-- 明確定義「全客戶基本配置」：表格內容分頁、查看歷史+單筆重置、生成歷史+清空歷史
-- 更新 ARCHITECTURE.md（Version 0.2.1 + ADR-005）
-
-### 2026-03-05 — Test-Report Debug 修正（依流程補文件）
-- 已修正倫飛「查看歷史」欄位語意：歷史 key 顯示改為「週別 key」，避免誤導為工單/採單
-- 已修正倫飛 `MO/Q'ty` 斜線多值配對：查詢 MO 時 Q'ty 依 `/` 位置對應後再預覽與生成
-- 已同步更新 `DEBUG.md`（兩筆 Bug 改為 Resolved）與 `ARCHITECTURE.md`（Version 0.2.2 + ADR-006）
-
 ---
 
-*Last updated: 2026-03-05*
+*Last updated: 2026-03-06*
