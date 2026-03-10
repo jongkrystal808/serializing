@@ -31,7 +31,6 @@ import {
   resolveQtyByPairedSlash
 } from "./modules/workOrder.js";
 import { HistoryModule } from "./modules/storage.js";
-import { supportsSourceBinding, getBoundFile, pickAndBindFile } from "./modules/sourceBinding.js";
 import { normalizeRangeText } from "./modules/utils.js";
 import {
   updateStatus,
@@ -73,7 +72,6 @@ function setExportEnabled(enabled) {
 function setLoading(isLoading, message = "") {
   state.isLoading = isLoading;
   ui.loadingIndicator.classList.toggle("active", isLoading);
-  ui.bindBtn.disabled = isLoading;
   ui.loadBtn.disabled = isLoading;
   ui.historyBtn.disabled = isLoading;
   setSearchEnabled(state.yingbangRowData.length > 0);
@@ -99,7 +97,6 @@ function updateLunfeiStatus(message, isError = false, isLoading = false) {
 function setLunfeiLoading(isLoading, message = "") {
   state.isLoading = isLoading;
   ui.lunfeiLoadingIndicator.classList.toggle("active", isLoading);
-  ui.lunfeiBindBtn.disabled = isLoading;
   ui.lunfeiLoadBtn.disabled = isLoading;
   ui.lunfeiSearchInput.disabled = isLoading || state.lunfeiRowData.length === 0;
   ui.lunfeiQueryBtn.disabled = isLoading || state.lunfeiRowData.length === 0;
@@ -125,7 +122,6 @@ function updateBngStatus(message, isError = false, isLoading = false) {
 function setBngLoading(isLoading, message = "") {
   state.isLoading = isLoading;
   ui.bngLoadingIndicator.classList.toggle("active", isLoading);
-  ui.bngBindBtn.disabled = isLoading;
   ui.bngLoadBtn.disabled = isLoading;
   ui.bngSearchInput.disabled = isLoading || state.bngRowData.length === 0;
   ui.bngQueryBtn.disabled = isLoading || state.bngRowData.length === 0;
@@ -151,7 +147,6 @@ function updateChgStatus(message, isError = false, isLoading = false) {
 function setChgLoading(isLoading, message = "") {
   state.isLoading = isLoading;
   ui.chgLoadingIndicator.classList.toggle("active", isLoading);
-  ui.chgBindBtn.disabled = isLoading;
   ui.chgLoadBtn.disabled = isLoading;
   ui.chgSearchInput.disabled = isLoading || state.chgRowData.length === 0;
   ui.chgQueryBtn.disabled = isLoading || state.chgRowData.length === 0;
@@ -179,7 +174,7 @@ function resetDataForCustomerSwitch() {
   ui.chgHistoryPanel.hidden = true;
   ui.previewPanel.innerHTML = `
     <h2>預覽窗格</h2>
-    <p>請先讀取 Excel，並輸入工單號後點擊「查詢/刷新」。</p>
+    <p>請先上傳 Excel，並輸入工單號後點擊「解析工單」。</p>
   `;
   setSearchEnabled(false);
   setExportEnabled(false);
@@ -406,7 +401,7 @@ function getLunfeiPreviewSN(row) {
 
 function performLunfeiSearch() {
   if (state.lunfeiRowData.length === 0) {
-    updateLunfeiStatus("請先讀取倫飛 Excel 檔案再查詢。", true);
+    updateLunfeiStatus("請先上傳倫飛 Excel 檔案再查詢。", true);
     return;
   }
 
@@ -459,7 +454,7 @@ function performLunfeiSearch() {
 
 function performBngSearch() {
   if (state.bngRowData.length === 0) {
-    updateBngStatus("請先讀取超恩 Excel 檔案再查詢。", true);
+    updateBngStatus("請先上傳超恩 Excel 檔案再查詢。", true);
     return;
   }
 
@@ -511,7 +506,7 @@ function performBngSearch() {
 
 function performChgSearch() {
   if (state.chgRowData.length === 0) {
-    updateChgStatus("請先讀取 KOYA Excel 檔案再查詢。", true);
+    updateChgStatus("請先上傳 KOYA Excel 檔案再查詢。", true);
     return;
   }
 
@@ -668,7 +663,7 @@ function performSearch() {
   }
 
   if (state.yingbangRowData.length === 0) {
-    updateStatus(ui, "請先讀取 Excel 檔案再查詢。", true);
+    updateStatus(ui, "請先上傳 Excel 檔案再查詢。", true);
     return;
   }
 
@@ -866,91 +861,15 @@ async function onChgFileSelected(event) {
   }
 }
 
-async function bindSourceFile() {
-  if (!supportsSourceBinding()) {
-    if (getActiveCustomerKey() === "lunfei") {
-      updateLunfeiStatus("目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
-    } else if (getActiveCustomerKey() === "bng") {
-      updateBngStatus("目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
-    } else if (getActiveCustomerKey() === "chg") {
-      updateChgStatus("目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
-    } else {
-      updateStatus(ui, "目前瀏覽器環境不支援來源綁定，請改用「讀取表格」。", true);
-    }
-    return;
-  }
-
-  try {
-    const pickedFile = await pickAndBindFile();
-    if (pickedFile) {
-      if (getActiveCustomerKey() === "lunfei") {
-        updateLunfeiStatus(`來源檔已綁定：${pickedFile.name}`);
-      } else if (getActiveCustomerKey() === "bng") {
-        updateBngStatus(`來源檔已綁定：${pickedFile.name}`);
-      } else if (getActiveCustomerKey() === "chg") {
-        updateChgStatus(`來源檔已綁定：${pickedFile.name}`);
-      } else {
-        updateStatus(ui, `來源檔已綁定：${pickedFile.name}`);
-      }
-    }
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return;
-    }
-    if (getActiveCustomerKey() === "lunfei") {
-      updateLunfeiStatus(`綁定來源失敗：${error.message || error}`, true);
-    } else if (getActiveCustomerKey() === "bng") {
-      updateBngStatus(`綁定來源失敗：${error.message || error}`, true);
-    } else if (getActiveCustomerKey() === "chg") {
-      updateChgStatus(`綁定來源失敗：${error.message || error}`, true);
-    } else {
-      updateStatus(ui, `綁定來源失敗：${error.message || error}`, true);
-    }
-  }
-}
-
 async function loadTable() {
-  if (!supportsSourceBinding()) {
-    if (getActiveCustomerKey() === "lunfei") {
-      ui.lunfeiFileInput.click();
-    } else if (getActiveCustomerKey() === "bng") {
-      ui.bngFileInput.click();
-    } else if (getActiveCustomerKey() === "chg") {
-      ui.chgFileInput.click();
-    } else {
-      ui.fileInput.click();
-    }
-    return;
-  }
-
-  try {
-    const boundFile = await getBoundFile();
-    if (boundFile) {
-      await processExcelFile(boundFile);
-      return;
-    }
-    if (getActiveCustomerKey() === "lunfei") {
-      ui.lunfeiFileInput.click();
-    } else if (getActiveCustomerKey() === "bng") {
-      ui.bngFileInput.click();
-    } else if (getActiveCustomerKey() === "chg") {
-      ui.chgFileInput.click();
-    } else {
-      ui.fileInput.click();
-    }
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return;
-    }
-    if (getActiveCustomerKey() === "lunfei") {
-      ui.lunfeiFileInput.click();
-    } else if (getActiveCustomerKey() === "bng") {
-      ui.bngFileInput.click();
-    } else if (getActiveCustomerKey() === "chg") {
-      ui.chgFileInput.click();
-    } else {
-      ui.fileInput.click();
-    }
+  if (getActiveCustomerKey() === "lunfei") {
+    ui.lunfeiFileInput.click();
+  } else if (getActiveCustomerKey() === "bng") {
+    ui.bngFileInput.click();
+  } else if (getActiveCustomerKey() === "chg") {
+    ui.chgFileInput.click();
+  } else {
+    ui.fileInput.click();
   }
 }
 
@@ -1118,12 +1037,7 @@ function initEvents() {
   ui.lunfeiTab.addEventListener("click", () => switchCustomerTab("lunfei"));
   ui.bngTab.addEventListener("click", () => switchCustomerTab("bng"));
   ui.chgTab.addEventListener("click", () => switchCustomerTab("chg"));
-  ui.bindBtn.addEventListener("click", bindSourceFile);
   ui.loadBtn.addEventListener("click", loadTable);
-  ui.lunfeiBindBtn.addEventListener("click", async () => {
-    switchCustomerTab("lunfei");
-    await bindSourceFile();
-  });
   ui.lunfeiLoadBtn.addEventListener("click", async () => {
     switchCustomerTab("lunfei");
     await loadTable();
@@ -1132,10 +1046,6 @@ function initEvents() {
     switchCustomerTab("lunfei");
     openLunfeiSerialHistoryPanel();
   });
-  ui.bngBindBtn.addEventListener("click", async () => {
-    switchCustomerTab("bng");
-    await bindSourceFile();
-  });
   ui.bngLoadBtn.addEventListener("click", async () => {
     switchCustomerTab("bng");
     await loadTable();
@@ -1143,10 +1053,6 @@ function initEvents() {
   ui.bngHistoryBtn.addEventListener("click", () => {
     switchCustomerTab("bng");
     openBngSerialHistoryPanel();
-  });
-  ui.chgBindBtn.addEventListener("click", async () => {
-    switchCustomerTab("chg");
-    await bindSourceFile();
   });
   ui.chgLoadBtn.addEventListener("click", async () => {
     switchCustomerTab("chg");

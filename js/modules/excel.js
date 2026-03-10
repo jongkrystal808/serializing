@@ -7,6 +7,8 @@ import {
 } from "./customerEngine.js";
 import { normalizeRangeText } from "./utils.js";
 
+const BARTENDER_COMPAT_MODE = true;
+
 export function verifyDependencies() {
   return typeof window.XLSX !== "undefined" && typeof window.saveAs !== "undefined";
 }
@@ -160,7 +162,61 @@ function buildUnifiedExportFilename() {
     .replace(/[\\/:*?"<>|]/g, "_")
     .replace(/\s+/g, "_")
     .replace(/\.+$/g, "");
-  return `${safeLabel}-SN.xlsx`;
+  const extension = BARTENDER_COMPAT_MODE ? "xls" : "xlsx";
+  return `${safeLabel}-SN.${extension}`;
+}
+
+function getExportMimeType() {
+  if (BARTENDER_COMPAT_MODE) {
+    return "application/vnd.ms-excel";
+  }
+  return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+}
+
+function writeWorkbookArray(workbook) {
+  if (BARTENDER_COMPAT_MODE) {
+    return window.XLSX.write(workbook, {
+      bookType: "xls",
+      type: "array",
+      bookSST: true
+    });
+  }
+  return window.XLSX.write(workbook, {
+    bookType: "xlsx",
+    type: "array",
+    bookSST: true
+  });
+}
+
+// 【用途】建立 BarTender 較穩定的 Excel 工作表：全部欄位強制為文字
+function buildCompatibleWorksheet(rows) {
+  const safeRows = Array.isArray(rows)
+    ? rows.map((row) => {
+      if (!Array.isArray(row)) {
+        return [String(row ?? "")];
+      }
+      return row.map((cell) => String(cell ?? ""));
+    })
+    : [];
+  const worksheet = window.XLSX.utils.aoa_to_sheet(safeRows, { cellDates: false });
+  if (!worksheet["!ref"]) {
+    return worksheet;
+  }
+  const range = window.XLSX.utils.decode_range(worksheet["!ref"]);
+  for (let row = range.s.r; row <= range.e.r; row += 1) {
+    for (let col = range.s.c; col <= range.e.c; col += 1) {
+      const cellAddress = window.XLSX.utils.encode_cell({ r: row, c: col });
+      const cell = worksheet[cellAddress];
+      if (!cell) {
+        continue;
+      }
+      cell.t = "s";
+      cell.v = String(cell.v ?? "");
+      delete cell.w;
+      delete cell.z;
+    }
+  }
+  return worksheet;
 }
 
 export function getTodayDateText() {
@@ -230,14 +286,14 @@ export function exportExcel(snList, moInput) {
   });
   const workbook = window.XLSX.utils.book_new();
   workbookData.sheets.forEach((sheet) => {
-    const worksheet = window.XLSX.utils.aoa_to_sheet(sheet.rows);
+    const worksheet = buildCompatibleWorksheet(sheet.rows);
     window.XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
   });
 
-  const output = window.XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const output = writeWorkbookArray(workbook);
   const blob = new Blob(
     [output],
-    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+    { type: getExportMimeType() }
   );
 
   const filename = buildUnifiedExportFilename();
@@ -257,14 +313,14 @@ export function exportLunfeiExcel(snList, boxRecord, moInput) {
   });
   const workbook = window.XLSX.utils.book_new();
   workbookData.sheets.forEach((sheet) => {
-    const worksheet = window.XLSX.utils.aoa_to_sheet(sheet.rows);
+    const worksheet = buildCompatibleWorksheet(sheet.rows);
     window.XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
   });
 
-  const output = window.XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  const output = writeWorkbookArray(workbook);
   const blob = new Blob(
     [output],
-    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+    { type: getExportMimeType() }
   );
 
   const filename = buildUnifiedExportFilename();
@@ -306,12 +362,12 @@ export function exportBngExcel(bundle, workOrderInput) {
   ]];
 
   const workbook = window.XLSX.utils.book_new();
-  window.XLSX.utils.book_append_sheet(workbook, window.XLSX.utils.aoa_to_sheet(snRows), "SN");
-  window.XLSX.utils.book_append_sheet(workbook, window.XLSX.utils.aoa_to_sheet(boxRows), "BOX");
-  const output = window.XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(snRows), "SN");
+  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(boxRows), "BOX");
+  const output = writeWorkbookArray(workbook);
   const blob = new Blob(
     [output],
-    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+    { type: getExportMimeType() }
   );
   const filename = buildUnifiedExportFilename();
   window.saveAs(blob, filename);
@@ -390,12 +446,12 @@ export function exportChgExcel(bundle, workOrderInput) {
   ]];
 
   const workbook = window.XLSX.utils.book_new();
-  window.XLSX.utils.book_append_sheet(workbook, window.XLSX.utils.aoa_to_sheet(snRows), "SN");
-  window.XLSX.utils.book_append_sheet(workbook, window.XLSX.utils.aoa_to_sheet(boxRows), "BOX");
-  const output = window.XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(snRows), "SN");
+  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(boxRows), "BOX");
+  const output = writeWorkbookArray(workbook);
   const blob = new Blob(
     [output],
-    { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }
+    { type: getExportMimeType() }
   );
   const filename = buildUnifiedExportFilename();
   window.saveAs(blob, filename);

@@ -24,6 +24,40 @@
 
 ## ✅ Resolved Bugs
 
+### BUG-20260310-001 — 匯出 Excel 匯入 BarTender 失敗（iFK -> iBT 轉型錯誤）
+
+**Status:** ✅ Resolved
+**Date Found:** 2026-03-10
+**Found By:** 使用者
+**Module:** ExcelExportModule
+**Severity:** 🔴 Critical
+
+---
+
+**symptom（症狀）:**
+> 匯出檔案匯入 BarTender 時，出現錯誤：`[500] Could not execute the specified command: System error: 無法將類型 'rxo190c.iFK' 的物件轉換為類型 'rxo190c.iBT'`
+
+**Steps to Reproduce（重現步驟）:**
+1. 在系統內完成查詢並點擊「生成序號 & 匯出」
+2. 取得匯出 Excel
+3. 將該 Excel 匯入 BarTender
+
+**Expected Result（預期結果）:**
+> BarTender 可正常讀取匯出的 Excel 資料來源。
+
+**Actual Result（實際結果）:**
+> BarTender 解析失敗並拋出型別轉換錯誤。
+
+**Root Cause（根本原因）:**
+> 匯出使用 `.xlsx` 與混合欄位型別，BarTender 在某些情境下對該格式/型別組合相容性不足，導致內部資料物件轉型失敗。
+
+**Fix（修復方式）:**
+> 匯出流程改為 BarTender 相容模式：輸出 `xls`（BIFF）並將所有儲存格強制為文字型別（`cell.t = "s"`），同時統一對應 MIME type。
+
+**Date Resolved:** 2026-03-10
+
+---
+
 ### BUG-20260305-001 — 倫飛查看歷史欄位標示誤導
 
 **Status:** ✅ Resolved

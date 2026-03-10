@@ -13,7 +13,7 @@
         sheetName: "營邦出貨",
         parseRules: ["arrow"],
         title: "SN-GENERATOR 營邦序號工具",
-        sourceHint: "來源：H:\\TE\\To Claire\\出貨記錄總表（Sheet：營邦出貨）",
+        sourceHint: "來源：使用者上傳 Excel（Sheet：營邦出貨）",
         searchPlaceholder: "輸入工單號",
         generationHistoryKey: "sn_generation_history_by_work_order",
         serialRule: { type: "po_plus_fixed", fixed: "1", padLength: 4 },
@@ -42,7 +42,7 @@
         sheetName: "倫飛出貨",
         parseRules: ["arrow"],
         title: "SN-GENERATOR 倫飛序號工具",
-        sourceHint: "來源：H:\\TE\\To Claire\\出貨記錄總表（Sheet：倫飛出貨）",
+        sourceHint: "來源：使用者上傳 Excel（Sheet：倫飛出貨）",
         searchPlaceholder: "輸入 MO",
         generationHistoryKey: "sn_generation_history_by_mo",
         serialRule: { type: "lunfei_weekly" },
@@ -73,13 +73,14 @@
         sheetName: "超恩出貨",
         parseRules: ["trim"],
         title: "SN-GENERATOR 超恩序號工具",
-        sourceHint: "來源：H:\\TE\\To Claire\\出貨記錄總表（Sheet：超恩出貨）",
-        searchPlaceholder: "輸入機種名稱",
+        sourceHint: "來源：使用者上傳 Excel（Sheet：超恩出貨）",
+        searchPlaceholder: "輸入 MO",
         generationHistoryKey: "sn_generation_history_by_work_order",
         serialRule: { type: "range_expand" },
-        exportStrategy: "single_sn",
-        exportColumns: ["PO", "Model", "料號", "SN", "Date"],
+        exportStrategy: "dual_sn_box",
+        exportColumns: ["序號", "MAC Address", "UUID", "BIOS", "FW"],
         columns: {
+          MO: "MO",
           DATE: "日期",
           WORK_ORDER: "工單",
           MODEL: "機種名稱",
@@ -89,9 +90,12 @@
           MAC_QTY: "MAC數量",
           MAC_BOARD_QTY: "MAC板子用量數量",
           SN_RANGE: "序號區間",
-          UUID_RANGE: "UUID區間"
+          UUID_RANGE: "UUID區間",
+          BIOS: "新版BIOS(以此為主)",
+          FW: "IGN FW版本"
         },
         columnAliases: {
+          MO: ["MO", "mo"],
           DATE: ["日期", "Date"],
           WORK_ORDER: ["工單", "工單號"],
           MODEL: ["機種名稱", "Model", "MODEL"],
@@ -101,7 +105,46 @@
           MAC_QTY: ["MAC數量"],
           MAC_BOARD_QTY: ["MAC板子用量數量", "MAC板用量數量"],
           SN_RANGE: ["序號區間", "SN區間"],
-          UUID_RANGE: ["UUID區間", "UUID"]
+          UUID_RANGE: ["UUID區間", "UUID"],
+          BIOS: ["新版BIOS(以此為主)", "新版BIOS", "BIOS"],
+          FW: ["IGN FW版本", "FW", "FW版本"]
+        }
+      },
+      chg: {
+        key: "chg",
+        label: "KOYA",
+        sheetName: "KOYA出貨",
+        parseRules: ["trim"],
+        title: "SN-GENERATOR KOYA 標籤工具",
+        sourceHint: "來源：使用者上傳 Excel（Sheet：KOYA出貨）",
+        searchPlaceholder: "輸入工單",
+        generationHistoryKey: "sn_generation_history_by_work_order",
+        serialRule: { type: "none" },
+        exportStrategy: "chg_dual_sheet",
+        exportColumns: ["工單", "PN"],
+        columns: {
+          WORK_ORDER: "工單",
+          QTY: "小張貼紙",
+          MODEL: "機種",
+          PN: "PN",
+          BATCH: "批量",
+          PO: "PO",
+          BOX_QTY: "滿箱數量",
+          DEMAND: "需求",
+          TAIL_QTY: "尾數數量",
+          FULL_PN: "full PN"
+        },
+        columnAliases: {
+          WORK_ORDER: ["工單", "工單號"],
+          QTY: ["小張貼紙", "QTY", "Qty", "數量"],
+          MODEL: ["機種", "Model", "MODEL"],
+          PN: ["PN", "P/N", "料號"],
+          BATCH: ["批量"],
+          PO: ["PO", "PO#"],
+          BOX_QTY: ["滿箱數量", "QTY", "Qty"],
+          DEMAND: ["需求"],
+          TAIL_QTY: ["尾數數量"],
+          FULL_PN: ["full PN", "FULL PN", "Full PN"]
         }
       }
     };
@@ -120,23 +163,23 @@
       <button type="button" id="tab-yingbang" class="preview-tab active" data-customer="yingbang">營邦</button>
       <button type="button" id="tab-lunfei" class="preview-tab" data-customer="lunfei">倫飛</button>
       <button type="button" id="tab-bng" class="preview-tab" data-customer="bng">超恩</button>
+      <button type="button" id="tab-chg" class="preview-tab" data-customer="chg">KOYA</button>
     </div>
   </section>
 
   <section id="yingbang-workspace">
-    <p id="source-hint">來源：H:\TE\To Claire\出貨記錄總表（Sheet：營邦出貨）</p>
+    <p id="source-hint">來源：使用者上傳 Excel（Sheet：營邦出貨）</p>
 
     <section class="card">
       <h2 class="section-title">資料來源設定</h2>
       <div class="toolbar">
-        <button id="btn-bind" class="btn-secondary">綁定來源</button>
-        <button id="btn-load">讀取表格</button>
+        <button id="btn-load">上傳 Excel</button>
         <button id="btn-history" class="btn-secondary">查看歷史</button>
       </div>
       <input id="file-input" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status">尚未讀取 Excel 檔案。</p>
+        <p id="status">尚未上傳 Excel 檔案。</p>
       </div>
     </section>
 
@@ -144,14 +187,14 @@
       <h2 class="section-title">查詢與操作</h2>
       <div class="toolbar">
         <input id="search-input" type="text" placeholder="輸入工單號" disabled>
-        <button id="btn-query" disabled>查詢/刷新</button>
+        <button id="btn-query" disabled>解析工單</button>
         <button id="btn-export" disabled>生成序號 & 匯出</button>
       </div>
     </section>
 
     <section id="preview-panel" class="card">
       <h2>預覽窗格</h2>
-      <p>請先讀取 Excel，並輸入工單號後點擊「查詢/刷新」。</p>
+      <p>請先上傳 Excel，並輸入工單號後點擊「解析工單」。</p>
     </section>
 
     <section id="history-panel" class="card" hidden>
@@ -161,31 +204,30 @@
   </section>
 
   <section id="lunfei-workspace" hidden>
-    <p>來源：H:\TE\To Claire\出貨記錄總表（Sheet：倫飛出貨）</p>
+    <p>來源：使用者上傳 Excel（Sheet：倫飛出貨）</p>
     <section class="card">
       <h2 class="section-title">資料來源設定（倫飛）</h2>
       <div class="toolbar">
-        <button id="btn-bind-lunfei" class="btn-secondary">綁定來源</button>
-        <button id="btn-load-lunfei">讀取表格</button>
+        <button id="btn-load-lunfei">上傳 Excel</button>
         <button id="btn-history-lunfei" class="btn-secondary">查看歷史</button>
       </div>
       <input id="file-input-lunfei" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-lunfei" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-lunfei">尚未讀取倫飛 Excel 檔案。</p>
+        <p id="status-lunfei">尚未上傳倫飛 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title">查詢與操作（倫飛）</h2>
       <div class="toolbar">
         <input id="search-input-lunfei" type="text" placeholder="輸入 MO" disabled>
-        <button id="btn-query-lunfei" disabled>查詢/刷新</button>
+        <button id="btn-query-lunfei" disabled>解析工單</button>
         <button id="btn-export-lunfei" disabled>生成序號 & 匯出</button>
       </div>
     </section>
     <section id="preview-panel-lunfei" class="card">
       <h2>倫飛預覽窗格</h2>
-      <p>請先讀取倫飛 Excel（Sheet：倫飛出貨）。</p>
+      <p>請先上傳倫飛 Excel（Sheet：倫飛出貨）。</p>
     </section>
     <section id="history-panel-lunfei" class="card" hidden>
       <h2>歷史記憶</h2>
@@ -194,33 +236,64 @@
   </section>
 
   <section id="bng-workspace" hidden>
-    <p>來源：H:\TE\To Claire\出貨記錄總表（Sheet：超恩出貨）</p>
+    <p>來源：使用者上傳 Excel（Sheet：超恩出貨）</p>
     <section class="card">
       <h2 class="section-title">資料來源設定（超恩）</h2>
       <div class="toolbar">
-        <button id="btn-bind-bng" class="btn-secondary">綁定來源</button>
-        <button id="btn-load-bng">讀取表格</button>
+        <button id="btn-load-bng">上傳 Excel</button>
         <button id="btn-history-bng" class="btn-secondary">查看歷史</button>
       </div>
       <input id="file-input-bng" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-bng" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-bng">尚未讀取超恩 Excel 檔案。</p>
+        <p id="status-bng">尚未上傳超恩 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title">查詢與操作（超恩）</h2>
       <div class="toolbar">
-        <input id="search-input-bng" type="text" placeholder="輸入機種名稱" disabled>
-        <button id="btn-query-bng" disabled>查詢/刷新</button>
+        <input id="search-input-bng" type="text" placeholder="輸入 MO" disabled>
+        <button id="btn-query-bng" disabled>解析工單</button>
         <button id="btn-export-bng" disabled>生成序號 & 匯出</button>
       </div>
     </section>
     <section id="preview-panel-bng" class="card">
       <h2>超恩預覽窗格</h2>
-      <p>請先讀取超恩 Excel（Sheet：超恩出貨）。</p>
+      <p>請先上傳超恩 Excel（Sheet：超恩出貨）。</p>
     </section>
     <section id="history-panel-bng" class="card" hidden>
+      <h2>歷史記憶</h2>
+      <p>按「查看歷史」以顯示目前歷史資料。</p>
+    </section>
+  </section>
+
+  <section id="chg-workspace" hidden>
+    <p>來源：使用者上傳 Excel（Sheet：KOYA出貨）</p>
+    <section class="card">
+      <h2 class="section-title">資料來源設定（KOYA）</h2>
+      <div class="toolbar">
+        <button id="btn-load-chg">上傳 Excel</button>
+        <button id="btn-history-chg" class="btn-secondary">查看歷史</button>
+      </div>
+      <input id="file-input-chg" type="file" accept=".xlsx,.xls" hidden>
+      <div class="status-row">
+        <span id="loading-indicator-chg" class="loading-indicator" aria-hidden="true"></span>
+        <p id="status-chg">尚未上傳 KOYA Excel 檔案。</p>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="section-title">查詢與操作（KOYA）</h2>
+      <div class="toolbar">
+        <input id="search-input-chg" type="text" placeholder="輸入工單" disabled>
+        <button id="btn-query-chg" disabled>解析工單</button>
+        <button id="btn-export-chg" disabled>生成序號 & 匯出</button>
+      </div>
+    </section>
+    <section id="preview-panel-chg" class="card">
+      <h2>KOYA 預覽窗格</h2>
+      <p>請先上傳 KOYA Excel（Sheet：KOYA出貨）。</p>
+    </section>
+    <section id="history-panel-chg" class="card" hidden>
       <h2>歷史記憶</h2>
       <p>按「查看歷史」以顯示目前歷史資料。</p>
     </section>
