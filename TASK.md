@@ -1,8 +1,8 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.2.4
-**Last Updated:** 2026-03-10
+**Version:** 0.3.0
+**Last Updated:** 2026-03-11
 
 ---
 
@@ -16,148 +16,78 @@
 
 ## 🔄 In Progress
 
-*（目前無進行中任務）*
-
----
-
-## ⬜ Todo — Phase 2：多客戶骨架 + 倫飛模組
-
-### 📥 T12 — 倫飛 ExcelReaderModule
-**Module:** 倫飛 / ExcelReaderModule（共用）
-**Priority:** 🔴 High
-**Depends on:** T11
-
-**Sub-tasks:**
-- [x] 設定倫飛 CONFIG：sheetName = `'倫飛出貨'`，searchField = `'MO'`  ✅ 2026-03-05
-- [x] 倫飛「讀取表格」按鈕：綁定/讀取 `出貨記錄總表.xlsx` 的「倫飛出貨」sheet  ✅ 2026-03-05
-- [x] 所有欄位套用共用 `parseArrow()`  ✅ 2026-03-05
-- [x] 解析欄位：MO、Model、工單、P/N、加工WO#、對應PCBA、Q'ty  ✅ 2026-03-05
-- [x] rowData 暫存為 `lunfeiRowData[]`（與 `yingbangRowData[]` 分開）  ✅ 2026-03-05
-- [x] 載入成功後顯示：「已載入倫飛出貨 N 筆資料」  ✅ 2026-03-05
-
-**Acceptance Criteria:**
-- 「倫飛出貨」sheet 正確解析，`lunfeiRowData[]` 含所有欄位
-- 欄位含 `→` → 取最後值
-- 找不到「倫飛出貨」sheet → 顯示友善錯誤
-
----
-
-### 🔍 T13 — 倫飛搜尋 MO + 特殊型號彈窗
-**Module:** 倫飛 / LunfeiPreviewModule
-**Priority:** 🔴 High
-**Depends on:** T12
-
-**Sub-tasks:**
-- [x] 建立倫飛搜尋框（搜尋 `MO` 欄位，非工單號）  ✅ 2026-03-05
-- [x] 建立「查詢/刷新」按鈕，支援 Enter 觸發  ✅ 2026-03-05
-- [x] 搜尋邏輯：精確匹配優先，其次部分匹配  ✅ 2026-03-05
-- [x] 查詢成功：  ✅ 2026-03-05
-  - [x] Model 顯示於預覽窗格最上方（醒目標示）  ✅ 2026-03-05
-  - [x] 欄位帶入：SN預覽、工單、P/N、加工WO#、對應PCBA、Q'ty（可複製）  ✅ 2026-03-05
-  - [x] 立即執行 `checkModelAlert(model)` 彈窗判斷：  ✅ 2026-03-05
-    - [x] Model 開頭 BAG017- / BAG159- / BAG016- → `window.alert` 或自訂 Modal 顯示列印提示 + 版本號路徑  ✅ 2026-03-05
-    - [x] Model = BAG428-001D → 彈窗提示「此型號不需要序號」+ 禁用「生成序號」按鈕  ✅ 2026-03-05
-- [x] 查詢失敗：顯示「找不到 MO：{輸入值}」  ✅ 2026-03-05
-
-**Acceptance Criteria:**
-- 搜尋 MO 成功 → Model 置頂，6 個欄位帶入且可複製
-- BAG017-/BAG159-/BAG016- 開頭 → 查詢後立即彈窗，訊息含路徑
-- BAG428-001D → 彈窗後「生成序號」按鈕為 disabled 狀態
-- 其他 Model → 無彈窗，正常顯示
-
----
-
-### 🔢 T14 — 倫飛 LunfeiSNGeneratorModule
-**Module:** 倫飛 / LunfeiSNGeneratorModule
-**Priority:** 🔴 High
-**Depends on:** T13
-
-**Sub-tasks:**
-- [x] 實作 `getLunfeiWeekKey()` → 返回 `"YYYY-WNN"`（e.g. `"2026-W09"`）  ✅ 2026-03-05
-- [x] 實作 `buildLunfeiSN(weekNum2, serial5)` → 返回 `"106" + WW + "62" + NNNNN`  ✅ 2026-03-05
-- [x] 實作 `generateLunfeiSNList(mo, qty)`：  ✅ 2026-03-05
-  - [x] 取 `lunfei_sn_history[weekKey]` 作為 lastSerial（預設 0）  ✅ 2026-03-05
-  - [x] 產生 qty 筆 SN，流水號五位補零，從 lastSerial+1 起  ✅ 2026-03-05
-  - [x] 更新 `lunfei_sn_history[weekKey]`  ✅ 2026-03-05
-  - [x] 追加 `lunfei_sn_generation_history_by_mo[MO]`  ✅ 2026-03-05
-- [x] 預覽窗格顯示第一筆 SN（可複製）  ✅ 2026-03-05
-
-**Acceptance Criteria:**
-- 2026 第9週，QTY=3 → `106096200001`, `106096200002`, `106096200003`
-- 同週再生 QTY=2 → 接續 `106096200004`, `106096200005`
-- 新一週（第10週）→ `106106200001` 重置
-- `lunfei_sn_history` 正確更新
-
----
-
-### 📤 T15 — 倫飛 ExcelExportModule（雙 Sheet）
-**Module:** 倫飛 / ExcelExportModule（共用擴充）
-**Priority:** 🔴 High
-**Depends on:** T14
-
-**Sub-tasks:**
-- [x] 實作倫飛匯出邏輯，產生含 2 個 sheet 的 Excel：  ✅ 2026-03-05
-  - [x] Sheet "SN"：欄位 `SN`，依 Q'ty 生成對應筆數，無其他欄位  ✅ 2026-03-05
-  - [x] Sheet "box"：欄位順序 `P/N`、`加工WO#`、`對應PCBA`、`工單`、`Model`、`日期(yyyy/mm/dd)`，日期為當日，1 筆資料  ✅ 2026-03-05
-- [x] 檔名格式：`{YYYYMMDD}-{MO號}.xlsx`  ✅ 2026-03-05
-- [x] 建立「生成序號 & 匯出」按鈕，串接 T14 + T15 完整流程  ✅ 2026-03-05
-- [x] BAG428-001D 時「生成序號」按鈕為 disabled，不可觸發此流程  ✅ 2026-03-05
-
-**Acceptance Criteria:**
-- 下載 Excel 含 2 sheets，名稱分別為 "SN" 與 "box"
-- SN sheet：只有 SN 欄，筆數 = Q'ty
-- box sheet：6 欄資料正確，日期格式 `yyyy/mm/dd`
-- 檔名含正確日期與 MO 號
-
----
-
-### 🧪 T16 — 倫飛整合測試
-**Module:** 全域
+### 🧪 T27 — 全流程整合測試（新架構）
+**Module:** QA / E2E
 **Priority:** 🟡 Medium
-**Depends on:** T12~T15
+**Depends on:** T26
 
 **Sub-tasks:**
-- [x] 測試完整流程：讀取表格 → 搜尋 MO → 預覽 → 生成序號 & 匯出  ✅ 2026-03-05
-- [x] 測試同週不同 MO 流水號接續（不重複）  ✅ 2026-03-05
-- [x] 測試新一週流水號重置為 00001  ✅ 2026-03-05
-- [x] 測試 BAG017- / BAG159- / BAG016- 彈窗提示  ✅ 2026-03-05
-- [x] 測試 BAG428-001D 彈窗 + 按鈕禁用  ✅ 2026-03-05
-- [x] 測試其他 Model 無彈窗  ✅ 2026-03-05
-- [x] 測試切換 Tab：倫飛 ↔ 營邦 互不干擾  ✅ 2026-03-05
-- [x] 測試 localStorage key 前綴正確（`lunfei_` vs `yingbang_`）  ✅ 2026-03-05
+- [ ] 營邦完整流程測試（解析/生成/匯出/歷史）
+- [ ] 倫飛完整流程測試（含週重置）
+- [ ] 超恩完整流程測試（區間展開與筆數驗證）
+- [ ] KOYA 完整流程測試（Label/Box 匯出）
+- [ ] 失敗情境測試（找不到 sheet、欄位錯誤、非法參數）
 
 **Acceptance Criteria:**
-- 所有情境無 console error
-- 倫飛與營邦 localStorage 互相獨立，不污染
+- 四客戶核心場景全部通過
+- 無阻斷性錯誤（P0/P1）
+- 測試結果可追溯（記錄於 Test-Report）
 
 ---
 
-## ⬜ Todo — Phase 1 殘項
+## ⬜ Todo — Phase 6：Nginx + FastAPI 架構轉換
 
-### 🧪 T09 — 整合測試（營邦）
-**Module:** 全域
-**Priority:** 🟡 Medium
-**Depends on:** T02~T08
+### 🚀 T28 — 部署與交接文件
+**Module:** Docs / DevOps
+**Priority:** 🟢 Low
+**Depends on:** T27
 
 **Sub-tasks:**
-- [x] 測試完整流程：載入 Excel → 查詢工單 → 預覽 → 匯出  ✅ 2026-03-05
-- [x] 測試跨工單流水號防重複（同採單號碼兩次生成）  ✅ 2026-03-05
-- [x] 測試 `→` 欄位更新邏輯（含多個 `→`）  ✅ 2026-03-05
-- [x] 測試 QTY > 1 時所有序號均正確產生  ✅ 2026-03-05
-- [x] 測試找不到工單的錯誤處理  ✅ 2026-03-05
-- [x] 測試 localStorage 清空後重新生成  ✅ 2026-03-05
+- [ ] 更新 `ARCHITECTURE.md` 為後端化架構
+- [ ] 更新 `PROCESS.md`（含新啟動與驗收流程）
+- [ ] 補充部署文件（Nginx/FastAPI 啟動步驟）
+- [ ] 補充 API 使用說明（request/response 範例）
 
 **Acceptance Criteria:**
-- 所有情境無 console error
-- 輸出 Excel 資料與預覽一致
+- 新同事可依文件完成本機部署
+- 開發流程與驗收流程可直接照文件執行
+- 文件內容與實作一致
 
 ---
 
 ## ✅ Done
 
+### ✅ T25 — 前端改為呼叫 FastAPI API（完成：2026-03-11）
+**Module:** Frontend / API Integration
+**Notes:** 已完成前端 API 串接：讀表改用 `/api/excel/parse`、生成改用 `/api/sn/generate`、匯出改用 `/api/export`、歷史查詢與重置改用 `/api/history/*`。同時補強後端 `HistoryService`：支援 `increment=0` 的 record-only 寫入不污染 `serial_history`，以及 `reset` 可刪除僅存在 generation record 的 key。
+
+### ✅ T26 — Nginx 反向代理與靜態資源配置（完成：2026-03-11）
+**Module:** Infra / Nginx
+**Notes:** 已完成 Docker 化部署：`backend/Dockerfile`、`docker-compose.yml`、`deploy/nginx/nginx.conf`。Nginx 已可提供前端靜態頁並反向代理 `/api/*` 到 FastAPI；已驗證 `http://localhost:8080/api/health`、`/api/excel/parse` 上傳與 `/api/export` 下載流程可用。
+
+### ✅ T24 — Excel 匯出服務後端化（完成：2026-03-11）
+**Module:** Backend / ExportService
+**Notes:** 已完成四客戶匯出服務與欄位模板（營邦單 sheet、倫飛/超恩/KOYA 雙 sheet），`POST /api/export` 直接回傳附件下載；預設檔名統一 `{customer}-SN.xls`。
+
+### ✅ T23 — Excel 解析服務後端化（完成：2026-03-11）
+**Module:** Backend / ExcelParserService
+**Notes:** 已完成 `multipart/form-data` 上傳解析（`POST /api/excel/parse`）；支援 `arrow/trim` parse rules、四客戶欄位 alias 對應與 sheet 不存在錯誤處理；回傳標準化 `rows` 與 `resolved_columns`。
+
+### ✅ T22 — SN 生成邏輯後端化（完成：2026-03-11）
+**Module:** Backend / SerialService
+**Notes:** 已實作後端 SN 服務：營邦 `po_plus_fixed`、倫飛 `lunfei_weekly`（含 ISO 週 key），並接入 `HistoryService` 進行流水號接續；超恩/KOYA 新增 `provided_serials` 對接欄位作為現行流程銜接點。
+
+### ✅ T21 — 歷史紀錄改為後端持久化（SQLite）（完成：2026-03-11）
+**Module:** Backend / HistoryService / DB
+**Notes:** 已建立 SQLite `serial_history/generation_history` 表；History API 完成 `GET /api/history/{customer}`、`POST /api/history/upsert`、`POST /api/history/reset`；加入 customer namespace 驗證（`yingbang/lunfei/bng/chg`）與非法參數防呆。
+
+### ✅ T20 — 建立 FastAPI 專案骨架與分層（完成：2026-03-11）
+**Module:** Backend / FastAPI / Project Structure
+**Notes:** 已建立 `backend/` 專案結構（`app/main.py`, `routers/`, `services/`, `schemas/`, `core/`），新增 `GET /api/health` 與 `/api/excel|sn|export|history` 路由骨架；完成統一 API 回應格式與全域錯誤處理；新增 `backend/requirements.txt` 與 `backend/README.md` 啟動說明。
+
 ### ✅ T19 — 全客戶匯出命名與歷史格式統一（完成：2026-03-10）
 **Module:** 全域 / UI / ExcelExport / History
-**Notes:** 超恩預覽窗格改為分區顯示（SN/MAC/UUID/FW&BIOS/BOX）；BOX 分區機種名稱遵循 `' 1.'` 截斷規則。全客戶匯出檔名統一為 `{客戶名}-SN.xlsx`（營邦/倫飛/超恩/KOYA），生成歷史留痕統一為 `YYYY-MM-DD-工單`。
+**Notes:** 超恩預覽窗格改為分區顯示（SN/MAC/UUID/FW&BIOS/BOX）；BOX 分區機種名稱遵循 `' 1.'` 截斷規則。全客戶匯出檔名統一為 `{客戶名}-SN.xls`（營邦/倫飛/超恩/KOYA），生成歷史留痕統一為 `YYYY-MM-DD-工單`。
 
 ### ✅ T18 — KOYA 客戶模組（完成：2026-03-09）
 **Module:** KOYA / 全域
@@ -165,53 +95,39 @@
 
 ### ✅ T17 — 超恩客戶模組（完成：2026-03-06）
 **Module:** 超恩 / 全域
-**Notes:** 已依 intake 規格更新超恩（`bng`）流程：讀取「超恩出貨」後以 `MO` 模糊查詢；預覽顯示日期/工單/機種名稱/機種料號/生產數量/MAC Address/MAC數量/MAC板子用量數量/序號區間/UUID區間；區間格式可自動補 ` ~ `，UUID=`0` 顯示「無」。匯出改為雙 sheet（`SN` + `BOX`）：SN 欄位為 `序號/MAC Address/UUID/BIOS/FW`，BOX 欄位為 `PO/Model/料號/SN/思創PN/Date`，檔名格式 `{YYYYMMDD}-{工單}-超恩.xlsx`。生成歷史紀錄改為 `工單-YYYYMMDDHHmmss`。
+**Notes:** 已依 intake 規格更新超恩（`bng`）流程：讀取「超恩出貨」後以 `MO` 模糊查詢；預覽顯示日期/工單/機種名稱/機種料號/生產數量/MAC Address/MAC數量/MAC板子用量數量/序號區間/UUID區間；區間格式可自動補 ` ~ `，UUID=`0` 顯示「無」。匯出改為雙 sheet（`SN` + `BOX`）：SN 欄位為 `序號/MAC Address/UUID/BIOS/FW`，BOX 欄位為 `PO/Model/料號/SN/思創PN/Date`。
 
 ### ✅ T16 — 倫飛整合測試（完成：2026-03-05）
 **Module:** 全域
-**Notes:** 已完成自動化整合模擬（同週跨 MO 接續、新週重置、雙 sheet 匯出、客戶前綴 key 隔離）並確認流程通過；型號彈窗與按鈕禁用規則已在查詢流程中驗證。後續依 test-report 完成 hotfix：倫飛歷史欄位改為週別 key、`MO/Q'ty` 斜線配對導入預覽與生成流程。
-
----
-
-### ✅ T09 — 整合測試（營邦）（完成：2026-03-05）
-**Module:** 全域
-**Notes:** 已完成終端模擬整合驗證（查詢、跨工單同採單連續流水、`→` 欄位更新、QTY>1、找不到工單、清空後重生、匯出資料與檔名檢查），核心流程通過。
-
----
+**Notes:** 已完成自動化整合模擬（同週跨 MO 接續、新週重置、雙 sheet 匯出、客戶前綴 key 隔離）並確認流程通過；型號彈窗與按鈕禁用規則已在查詢流程中驗證。
 
 ### ✅ T15 — 倫飛 ExcelExportModule（雙 Sheet）（完成：2026-03-05）
 **Module:** 倫飛 / ExcelExportModule（共用擴充）
-**Notes:** 已實作 `exportLunfeiExcel()`，匯出含 "SN" 與 "box" 兩個 sheet；SN sheet 僅 SN 欄、筆數等於 Q'ty；box sheet 欄位為 `P/N/加工WO#/對應PCBA/工單/Model/日期`。倫飛「生成序號 & 匯出」已串接 T14 生成流程，檔名為 `{YYYYMMDD}-{MO}.xlsx`，且 BAG428-001D 保持 disabled 防呆。
-
----
+**Notes:** 已實作 `exportLunfeiExcel()`，匯出含 "SN" 與 "box" 兩個 sheet；SN sheet 僅 SN 欄、筆數等於 Q'ty；box sheet 欄位為 `P/N/加工WO#/對應PCBA/工單/Model/日期`。
 
 ### ✅ T14 — 倫飛 LunfeiSNGeneratorModule（完成：2026-03-05）
 **Module:** 倫飛 / LunfeiSNGeneratorModule
-**Notes:** 已完成 `getLunfeiWeekKey/buildLunfeiSN/generateLunfeiSNList`，以 `YYYY-WNN` 作為週流水歷史 key，同週跨 MO 接續五位流水號；並將生成紀錄寫入 `lunfei_sn_generation_history_by_mo`。倫飛查詢後預覽可顯示第一筆 SN 並可複製。
-
----
+**Notes:** 已完成 `getLunfeiWeekKey/buildLunfeiSN/generateLunfeiSNList`，以 `YYYY-WNN` 作為週流水歷史 key，同週跨 MO 接續五位流水號；並將生成紀錄寫入 `lunfei_sn_generation_history_by_mo`。
 
 ### ✅ T13 — 倫飛搜尋 MO + 特殊型號彈窗（完成：2026-03-05）
 **Module:** 倫飛 / LunfeiPreviewModule
 **Notes:** 已新增倫飛搜尋框與查詢按鈕（含 Enter），MO 搜尋採精確優先/部分匹配次之；查詢成功後於預覽置頂顯示 Model 並帶入可複製欄位，並即時執行特殊型號彈窗判斷與 BAG428-001D 生成按鈕禁用。
 
----
-
 ### ✅ T12 — 倫飛 ExcelReaderModule（完成：2026-03-05）
 **Module:** 倫飛 / ExcelReaderModule（共用）
-**Notes:** 已新增倫飛來源設定區（綁定來源/讀取表格），讀取 `倫飛出貨` sheet 並套用共用 `parseArrow()`；資料獨立儲存於 `lunfeiRowData[]`，與 `yingbangRowData[]` 分離；載入成功顯示「已載入倫飛出貨 N 筆資料」。
-
----
+**Notes:** 已新增倫飛來源設定區，讀取 `倫飛出貨` sheet 並套用共用 `parseArrow()`；資料獨立儲存於 `lunfeiRowData[]`。
 
 ### ✅ T11 — 多客戶骨架重構（完成：2026-03-05）
 **Module:** 全域架構
-**Notes:** 已於 `index.html` 頂部建立 `const CUSTOMERS`（營邦/倫飛），導入 Tab UI（營邦/倫飛）與切換流程；營邦 localStorage key 改為 `yingbang_` 前綴並加入舊 key migration；倫飛頁籤目前為可切換空殼工作區，待 T12 起逐步實作。
-
----
+**Notes:** 已於 `index.html` 頂部建立 `const CUSTOMERS`（營邦/倫飛），導入 Tab UI 與切換流程；營邦 localStorage key 改為 `yingbang_` 前綴並加入舊 key migration。
 
 ### ✅ T10 — 歷史記憶顯示表格（完成：2026-03-05）
 **Module:** HistoryModule / UI
 **Notes:** 已新增「查看歷史」按鈕，支援表格顯示所有歷史 key 與已使用流水號，並提供單筆重置功能。
+
+### ✅ T09 — 整合測試（營邦）（完成：2026-03-05）
+**Module:** 全域
+**Notes:** 已完成終端模擬整合驗證（查詢、跨工單同採單連續流水、`→` 欄位更新、QTY>1、找不到工單、清空後重生、匯出資料與檔名檢查）。
 
 ### ✅ T08 — UI 整體版面與樣式（完成：2026-03-04）
 **Module:** UI
@@ -256,19 +172,17 @@
 | Phase 3（新增超恩） | 1 | 1 | 0 | 0 |
 | Phase 4（新增 KOYA） | 1 | 1 | 0 | 0 |
 | Phase 5（全客戶規則統一） | 1 | 1 | 0 | 0 |
-| **Total** | **18** | **18** | **0** | **0** |
+| Phase 6（Nginx + FastAPI） | 9 | 7 | 1 | 1 |
+| **Total** | **27** | **25** | **1** | **1** |
 
 ---
 
-## 🗓️ Suggested Build Order（Phase 2）
+## 🗓️ Suggested Build Order（Phase 6）
 
 ```
-T11 多客戶骨架重構（Tab UI + storageKey 前綴）
-  └─ T12 倫飛 ExcelReaderModule
-       └─ T13 倫飛搜尋 MO + 特殊型號彈窗
-            └─ T14 倫飛 LunfeiSNGeneratorModule
-                 └─ T15 倫飛 ExcelExportModule（雙 Sheet）
-                      └─ T16 倫飛整合測試
+T25 前端 API 串接
+  └─ T27 全流程整合測試
+       └─ T28 部署與交接文件
 ```
 
 ---
@@ -278,11 +192,11 @@ T11 多客戶骨架重構（Tab UI + storageKey 前綴）
 每次請 AI 協助實作時，請提供：
 1. 本文件（確認目前任務）
 2. `ARCHITECTURE.md`（了解模組設計與規則）
-3. 目前 `index.html` 內容（若已有部分實作）
+3. 相關現況程式碼（前端或 backend）
 
 每個 Task 建議**單獨交給 AI 執行**，避免一次處理多個模組。
-Phase 2 從 **T11** 開始，T11 完成後確認營邦功能正常再繼續。
+目前請從 **T25** 開始執行，完成並驗證後再進到下一個 Task。
 
 ---
 
-*Last updated: 2026-03-10*
+*Last updated: 2026-03-11*

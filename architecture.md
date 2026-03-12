@@ -1,8 +1,8 @@
 # Project Architecture
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.2.3
-**Last Updated:** 2026-03-06
+**Version:** 0.2.5
+**Last Updated:** 2026-03-11
 
 ---
 
@@ -29,7 +29,7 @@
 - Language:       JavaScript (ES6 Modules)
 - Build Tool:     無（直接開啟 .html 檔案）
 - State:          localStorage（序號歷史記憶）
-- Browser API:    File System Access API（可綁定來源檔） + IndexedDB（保存 file handle）
+- Browser API:    FileReader API（目前主流程）+ File System Access API + IndexedDB（已預留 sourceBinding 模組）
 - UI/CSS:         獨立樣式檔（styles/main.css）
 - Icons:          無
 - Routing:        無（單頁應用，客戶頁籤切換）
@@ -38,7 +38,7 @@
 ### Backend & Infrastructure
 ```
 - Database:       無後端資料庫，使用 localStorage 持久化序號歷史
-- File I/O:       使用 SheetJS (xlsx.js) 讀取 Excel (.xlsx) 並產生輸出 Excel
+- File I/O:       使用 SheetJS (xlsx.js) 讀取 Excel（.xlsx/.xls）並輸出 Excel
 - 資料來源:        H:\TE\To Claire\出貨記錄總表.xlsx（各客戶各自的 sheet）
 - 部署方式:        本機直接開啟 HTML 檔案（無需伺服器）
 ```
@@ -48,8 +48,9 @@
 {
   "xlsx (SheetJS)": "CDN ^0.18.x - 讀取與輸出 Excel 檔案",
   "FileSaver.js":   "CDN ^2.x.x - 觸發瀏覽器下載 Excel 輸出檔",
-  "localStorage":   "瀏覽器原生 - 持久化序號歷史與來源檔顯示名稱",
-  "IndexedDB":      "瀏覽器原生 - 保存綁定來源檔 file handle"
+  "localStorage":   "瀏覽器原生 - 持久化序號與生成歷史",
+  "FileReader API": "瀏覽器原生 - 讀取上傳的 Excel 檔案",
+  "IndexedDB":      "瀏覽器原生 - 保存來源檔 file handle（預留）"
 }
 ```
 
@@ -77,12 +78,14 @@ SN-GENERATOR/
 │
 ├── (runtime, no files)
 │   ├── localStorage               # 各客戶序號歷史（以客戶前綴區分 key）
-│   ├── IndexedDB                  # 各客戶來源檔 file handle
+│   ├── IndexedDB                  # 各客戶來源檔 file handle（sourceBinding 預留）
 │   └── FileReader API             # 讀取 Excel 來源檔案
 │
 └── (output)
-    ├── {YYYYMMDD}-{工單號}.xlsx   # 營邦輸出（1 sheet：SN/Datecode/PN）
-    └── {YYYYMMDD}-{MO號}.xlsx    # 倫飛輸出（2 sheets：SN + box）
+    ├── 營邦-SN.xls                # 統一命名（BarTender 相容模式）
+    ├── 倫飛-SN.xls                # 統一命名（BarTender 相容模式）
+    ├── 超恩-SN.xls                # 統一命名（BarTender 相容模式）
+    └── KOYA-SN.xls                # 統一命名（BarTender 相容模式）
 ```
 
 ---
@@ -144,11 +147,21 @@ const CUSTOMERS = {
     label:       '超恩',
     sheetName:   '超恩出貨',
     storageKey:  'bng',
-    searchField: '機種名稱',
+    searchField: 'MO',
     parseRules:  ['trim'],
     serialRule:  { type: 'range_expand' },
-    exportStrategy: 'single_sn',
-    exportColumns: ['PO', 'Model', '料號', 'SN', 'Date']
+    exportStrategy: 'dual_sn_box',
+    exportColumns: ['序號', 'MAC Address', 'UUID', 'BIOS', 'FW']
+  },
+  chg: {
+    label:       'KOYA',
+    sheetName:   'KOYA出貨',
+    storageKey:  'chg',
+    searchField: '工單',
+    parseRules:  ['trim'],
+    serialRule:  { type: 'none' },
+    exportStrategy: 'chg_dual_sheet',
+    exportColumns: ['工單', 'PN']
   }
 };
 ```
@@ -175,12 +188,19 @@ const CUSTOMERS = {
   → { "2026-W09": 3, "2026-W10": 0 }
 
 "lunfei_sn_generation_history_by_mo"
-  → { "MO號": ["YYYY-MM-DD-MO號", ...] }
+  // key 仍以 MO 分組；record 採統一 YYYY-MM-DD-工單（若缺工單則 fallback MO）
+  → { "MO號": ["YYYY-MM-DD-工單", ...] }
 
 "bng_sn_history"
   → { "工單": lastSerial(整數) }
 
 "bng_sn_generation_history_by_work_order"
+  → { "工單": ["YYYY-MM-DD-工單", ...] }
+
+"chg_sn_history"
+  → { "工單": lastSerial(整數) }
+
+"chg_sn_generation_history_by_work_order"
   → { "工單": ["YYYY-MM-DD-工單", ...] }
 ```
 
@@ -286,13 +306,10 @@ UUID 尾碼固定 17 個 F（FFFFFFFFFFFFFFFFF）
 
 **輸出：**
 ```
-single_sn（SN sheet）
-欄位：PO / Model / 料號 / SN / Date
-PO 來源：工單
-Model 來源：機種名稱
-料號 來源：機種料號
-SN 來源：序號區間展開結果
-Date 來源：日期（yyyy/mm/dd）
+雙 Sheet（SN + BOX）
+SN sheet 欄位：序號 / MAC Address / UUID / BIOS / FW
+BOX sheet 欄位：PO / Model / 料號 / SN / 思創PN / Date
+其中 BOX 的 Model 會套用 `' 1.'` 截斷規則（只保留前段機種名稱）
 ```
 
 ---
@@ -354,7 +371,7 @@ resolveQtyByPairedSlash(row, query, "MO", "QTY")
 ```javascript
 parseRules      // 表格讀取特殊規則（例如 arrow）
 serialRule      // SN 生成規則（例如 po_plus_fixed、lunfei_weekly）
-exportStrategy  // 匯出 Excel 內容策略（single_sn、dual_sn_box）
+exportStrategy  // 匯出 Excel 內容策略（single_sn、dual_sn_box、chg_dual_sheet）
 ```
 
 **共用引擎：**
@@ -362,6 +379,7 @@ exportStrategy  // 匯出 Excel 內容策略（single_sn、dual_sn_box）
 applyParseRules(value, rules)
 buildSerialByRule(serialRule, context)
 buildWorkbookByStrategy(exportStrategy, args)
+// 超恩與 KOYA 目前使用 custom exporter（exportBngExcel / exportChgExcel）
 ```
 
 **Consequences:**
@@ -377,10 +395,10 @@ buildWorkbookByStrategy(exportStrategy, args)
 **Purpose:** 讀取 Excel 來源，解析指定 sheet，套用箭頭更新邏輯
 
 ```javascript
-- loadExcel(file, sheetName)   → 讀取 .xlsx，返回指定 sheet 的 row 陣列
+- loadExcel(file)              → 讀取上傳檔案，依 active customer 的 sheetName 解析 row 陣列
+- extractSheetData(workbook)   → 解析指定 sheet 並套用 parseRules（arrow/trim）
 - parseArrow(cellValue)        → 處理含 → 的欄位，返回最新有效值
-- bindSourceFile(customerKey)  → 綁定來源檔（File System Access API）
-- loadTable(customerKey)       → 優先讀取已綁定來源檔
+// sourceBinding.js 仍存在，作為後續「來源檔綁定」能力預留
 ```
 
 ---
@@ -401,7 +419,11 @@ buildWorkbookByStrategy(exportStrategy, args)
 **Purpose:** 依各客戶輸出格式產生並下載 Excel
 
 ```javascript
-- exportExcel(snList, exportConfig)  → 產生多 sheet Excel 並下載
+- exportExcel(snList, exportConfig)  → 營邦共用匯出（策略引擎）
+- exportLunfeiExcel(snList, boxRecord) → 倫飛雙 Sheet 匯出
+- exportBngExcel(bundle)             → 超恩雙 Sheet 匯出（SN + BOX）
+- exportChgExcel(bundle)             → KOYA 雙 Sheet 匯出（SN + BOX）
+// 檔名統一：{客戶名}-SN.xls（BarTender 相容模式）
 ```
 
 ---
@@ -508,12 +530,12 @@ buildWorkbookByStrategy(exportStrategy, args)
 ├── 解析「超恩出貨」sheet（trim 規則）
 └── rowData[] 暫存記憶體
 
-搜尋機種名稱 →
-├── 比對機種名稱（精確匹配優先，其次部分匹配）
+搜尋 MO →
+├── 比對 MO 欄位（精確匹配優先，其次部分匹配）
 ├── 查詢成功：
-│   ├── 帶入預覽欄位（日期/工單/機種名稱/機種料號/生產數量/MAC Address/MAC數量/MAC板子用量數量/序號區間/UUID區間）
+│   ├── 分區預覽：SN / MAC / UUID / FW&BIOS / BOX
 │   └── 區間顯示正規化（空白分隔自動補為 ` ~ `）
-└── 查詢失敗：顯示「找不到機種名稱：{輸入值}」
+└── 查詢失敗：顯示「查無對應資料，請確認 MO 是否正確」
 
 生成序號 & 匯出 →
 ├── 展開 MAC 區間（hex/dec 自動判斷）
@@ -522,7 +544,34 @@ buildWorkbookByStrategy(exportStrategy, args)
 ├── 驗證筆數（MAC=MAC數量，SN/UUID=生產數量）
 ├── 更新 bng_sn_history[工單]
 ├── 追加 bng_sn_generation_history_by_work_order[工單]
-└── 匯出 Excel（1 sheet：PO/Model/料號/SN/Date）
+└── 匯出 Excel（2 sheets）：
+    ├── Sheet "SN"：序號、MAC Address、UUID、BIOS、FW
+    └── Sheet "BOX"：PO、Model、料號、SN、思創PN、Date
+```
+
+---
+
+### KOYA 流程
+
+```
+讀取表格 →
+├── 解析「KOYA出貨」sheet（trim 規則）
+└── rowData[] 暫存記憶體
+
+搜尋工單 →
+├── 比對工單欄位（精確匹配優先，其次部分匹配）
+├── 查詢成功：
+│   ├── 顯示工單/機種/PO/批量
+│   ├── Label 分區：PN、小張貼紙
+│   └── Box Label 分區：滿箱數量、需求、尾數數量
+└── 查詢失敗：顯示「查無對應資料，請確認工單是否正確」
+
+生成序號 & 匯出 →
+├── 以「小張貼紙」作為 SN sheet 筆數
+├── SN sheet 欄位：工單、PN（重複列）
+├── BOX sheet 欄位：PO、PN、full PN、DDC PN、DDC LOT、QTY、DATE
+├── DATE 為匯出當日（yyyy/mm/dd）
+└── 更新 chg_sn_history / chg_sn_generation_history_by_work_order
 ```
 
 ---
@@ -540,6 +589,8 @@ buildWorkbookByStrategy(exportStrategy, args)
 ```
 - 營邦：採單號碼
 - 倫飛：週別 key（YYYY-WNN）
+- 超恩：工單
+- KOYA：工單
 ```
 
 ---
@@ -564,7 +615,7 @@ buildWorkbookByStrategy(exportStrategy, args)
 
 ### Code Organization
 - **1 HTML 檔案** — 所有邏輯集中，方便非工程師維護
-- **客戶區塊以註解分隔** — `// ===== 營邦 =====`、`// ===== 倫飛 =====`
+- **客戶區塊以註解分隔** — `// ===== 營邦 / 倫飛 / 超恩 / KOYA =====`
 - **Function 命名** — 客戶專屬函式加前綴（`lunfei_`），共用函式無前綴
 - **常數集中定義** — 各客戶 CONFIG 在頂部 `const CUSTOMERS` 物件內
 - **中文註解** — 業務邏輯使用中文
@@ -602,6 +653,14 @@ buildWorkbookByStrategy(exportStrategy, args)
 │                                                               │
 │  ┌──────────────── Tab: 倫飛 ──────────────────────┐         │
 │  │  LunfeiSNGeneratorModule │  LunfeiPreviewModule  │         │
+│  └─────────────────────────────────────────────────┘         │
+│                                                               │
+│  ┌──────────────── Tab: 超恩 ──────────────────────┐         │
+│  │  BngRangeExpandModule     │  BngPreviewModule    │         │
+│  └─────────────────────────────────────────────────┘         │
+│                                                               │
+│  ┌──────────────── Tab: KOYA ──────────────────────┐         │
+│  │  ChgExportBundleModule    │  ChgPreviewModule    │         │
 │  └─────────────────────────────────────────────────┘         │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -653,7 +712,8 @@ Sheet "box"
 ```
 日期               → 預覽/輸出 Date
 工單               → 歷史主鍵 / 輸出 PO
-機種名稱            → 搜尋鍵值 / 輸出 Model
+MO                → 搜尋鍵值
+機種名稱            → 預覽顯示 / 輸出 Model
 機種料號            → 輸出料號
 生產數量            → 生成筆數驗證（SN / UUID）
 MAC Address         → MAC 區間展開
@@ -663,15 +723,54 @@ MAC板子用量數量      → 預覽顯示
 UUID區間            → UUID 區間展開（0 表示無）
 ```
 
-### 超恩 — 輸出 Excel Schema（1 Sheet）
+### 超恩 — 輸出 Excel Schema（2 Sheets）
 
 ```
 Sheet "SN"
+  欄A: 序號
+  欄B: MAC Address
+  欄C: UUID
+  欄D: BIOS
+  欄E: FW
+
+Sheet "BOX"
   欄A: PO
-  欄B: Model
+  欄B: Model（套用 `' 1.'` 截斷規則）
   欄C: 料號
-  欄D: SN
-  欄E: Date（yyyy/mm/dd）
+  欄D: SN（序號區間原文）
+  欄E: 思創PN
+  欄F: Date（yyyy/mm/dd）
+```
+
+### KOYA — 來源欄位對應（出貨記錄總表 → KOYA出貨 sheet）
+
+```
+工單         → 搜尋鍵值 / SN sheet 欄位
+機種         → 預覽顯示 / BOX 的 DDC PN
+PN          → 預覽顯示 / SN + BOX 欄位
+PO          → 預覽顯示 / BOX 欄位
+小張貼紙      → SN sheet 生成筆數
+滿箱數量      → 預覽顯示 / BOX 的 QTY
+需求         → 預覽顯示
+尾數數量      → 預覽顯示
+full PN     → BOX 欄位
+```
+
+### KOYA — 輸出 Excel Schema（2 Sheets）
+
+```
+Sheet "SN"
+  欄A: 工單（依小張貼紙數量重複列）
+  欄B: PN
+
+Sheet "BOX"
+  欄A: PO
+  欄B: PN
+  欄C: full PN
+  欄D: DDC PN（機種）
+  欄E: DDC LOT（工單）
+  欄F: QTY（滿箱數量）
+  欄G: DATE（yyyy/mm/dd）
 ```
 
 ### localStorage Schema（多客戶）
@@ -683,11 +782,15 @@ Sheet "SN"
 
 // 倫飛
 "lunfei_sn_history"                            → { "YYYY-WNN": lastSerial }
-"lunfei_sn_generation_history_by_mo"           → { "MO號": ["YYYY-MM-DD-MO號"] }
+"lunfei_sn_generation_history_by_mo"           → { "MO號": ["YYYY-MM-DD-工單"] } // 缺工單時 fallback MO
 
 // 超恩
 "bng_sn_history"                               → { "工單": lastSerial }
 "bng_sn_generation_history_by_work_order"      → { "工單": ["YYYY-MM-DD-工單"] }
+
+// KOYA
+"chg_sn_history"                               → { "工單": lastSerial }
+"chg_sn_generation_history_by_work_order"      → { "工單": ["YYYY-MM-DD-工單"] }
 ```
 
 ---
@@ -718,6 +821,8 @@ Sheet "SN"
 - **0.2.1** - 2026-03-05 - 客戶差異策略化（parseRules/serialRule/exportStrategy），匯出欄位與內容可依客戶自訂，並定義全客戶基本配置
 - **0.2.2** - 2026-03-05 - 倫飛新增 MO/Q'ty 斜線配對規則；歷史表格 key 標示改為依客戶語意顯示（營邦採單號碼 / 倫飛週別 key）
 - **0.2.3** - 2026-03-06 - 新增超恩客戶（bng）：機種名稱查詢、區間展開生成（MAC/SN/UUID）、UUID=0 顯示無、single_sn 匯出欄位 `PO/Model/料號/SN/Date`
+- **0.2.4** - 2026-03-09 - 新增 KOYA 客戶（chg）：工單查詢、Label/Box Label 分區預覽、雙 sheet 匯出（SN:工單/PN；BOX:PO/PN/full PN/DDC PN/DDC LOT/QTY/DATE）
+- **0.2.5** - 2026-03-11 - 對齊 T19：全客戶匯出檔名統一 `{客戶名}-SN.xls`、生成歷史格式統一 `YYYY-MM-DD-工單`、超恩改為雙 sheet 匯出與分區預覽
 
 ---
 
@@ -745,6 +850,17 @@ Sheet "SN"
 - **Test 1:** 輸出 Excel 含 2 sheets（SN、box）
 - **Test 2:** SN sheet 筆數與 Q'ty 相同
 - **Test 3:** box sheet 6 欄正確，日期格式 yyyy/mm/dd
+
+### [超恩] Bng Export & Range Module
+- **Test 1:** MAC/SN/UUID 區間展開筆數驗證正確
+- **Test 2:** UUID = 0 時顯示「無」
+- **Test 3:** 輸出 Excel 含 2 sheets（SN、BOX）
+- **Test 4:** BOX 的 Model 套用 `' 1.'` 截斷規則
+
+### [KOYA] Chg Export Module
+- **Test 1:** 以「小張貼紙」數量生成 SN sheet 重複列
+- **Test 2:** BOX 欄位（PO/PN/full PN/DDC PN/DDC LOT/QTY/DATE）正確
+- **Test 3:** DATE 為匯出當日 yyyy/mm/dd
 
 ---
 
@@ -774,7 +890,7 @@ Sheet "SN"
 ### ADR-005: 匯出欄位與內容策略化
 **Date:** 2026-03-05 | **Status:** Accepted
 **Context:** 新客戶差異不只在 SN 規則，也包含輸出 Excel 欄位與內容
-**Decision:** 將匯出改為 `exportStrategy`（例如 `single_sn` / `dual_sn_box`），由共用策略引擎產生 workbook
+**Decision:** 將匯出改為 `exportStrategy`（例如 `single_sn` / `dual_sn_box` / `chg_dual_sheet`），由共用策略引擎產生 workbook；特殊格式可由 custom exporter 補充
 **Consequences:** 新客戶可不改主流程直接客製輸出；策略數量增加時需維護策略測試
 
 ### ADR-006: 倫飛 Q'ty 採 MO 斜線位置配對
@@ -789,6 +905,12 @@ Sheet "SN"
 **Decision:** 新增區間展開流程（支援 `A ~ B` 與 `A B`），依字元自動判斷 hex/dec；UUID `0` 視為無
 **Consequences:** 可直接遵循客戶來源區間，不依賴固定 SN 模板；若來源區間與數量欄位不一致，匯出前即阻擋並提示
 
+### ADR-008: 全客戶匯出命名與留痕格式統一
+**Date:** 2026-03-10 | **Status:** Accepted
+**Context:** 多客戶併行後，檔名與生成歷史格式不一致，現場追蹤成本高
+**Decision:** 全客戶輸出檔名統一為 `{客戶名}-SN.xls`（BarTender 相容模式）；生成歷史 record 統一 `YYYY-MM-DD-工單`（倫飛缺工單時 fallback MO）
+**Consequences:** 現場交付與稽核格式一致；若日後關閉 BarTender 相容模式，副檔名可回復為 `.xlsx`
+
 ---
 
 ## 🎨 Design Patterns Used
@@ -801,4 +923,4 @@ Sheet "SN"
 ---
 
 *This document maintained in current state for effective development*
-*Last updated: 2026-03-06*
+*Last updated: 2026-03-11*

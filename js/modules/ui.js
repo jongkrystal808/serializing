@@ -309,13 +309,20 @@ export function renderSerialHistoryTableIn(panelElement, entries, keyLabel = "�
   }
 
   const rows = entries
-    .map((item) => `
-      <tr>
-        <td>${escapeHtml(item.key)}</td>
-        <td>${escapeHtml(item.lastSerial)}</td>
-        <td><button type="button" class="btn-secondary history-reset-btn" data-history-key="${escapeHtml(item.key)}">重置</button></td>
-      </tr>
-    `)
+    .map((item) => {
+      const rawLastSerial = item?.lastSerial ?? item?.last_serial ?? 0;
+      const lastSerial = Number(rawLastSerial);
+      const usedSerialText = Number.isFinite(lastSerial) && lastSerial > 0
+        ? `${lastSerial}（共 ${lastSerial} 筆）`
+        : "0（共 0 筆）";
+      return `
+        <tr>
+          <td>${escapeHtml(item.key)}</td>
+          <td>${escapeHtml(usedSerialText)}</td>
+          <td><button type="button" class="btn-secondary history-reset-btn" data-history-key="${escapeHtml(item.key)}">重置</button></td>
+        </tr>
+      `;
+    })
     .join("");
 
   panelElement.innerHTML = `
@@ -325,7 +332,7 @@ export function renderSerialHistoryTableIn(panelElement, entries, keyLabel = "�
         <thead>
           <tr>
             <th>${escapeHtml(keyLabel)}</th>
-            <th>已使用流水號</th>
+            <th>已使用流水號（對應數量）</th>
             <th>操作</th>
           </tr>
         </thead>

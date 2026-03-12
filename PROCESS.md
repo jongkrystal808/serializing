@@ -59,9 +59,14 @@
 
 目前 index.html 如附件，請在既有內容上修改，不要刪除已完成的功能。
 
-完成後請說明：
-1. 修改了哪些地方
-2. 如何測試驗收
+程式碼規範：
+1. 每個函式開頭加上中文單行註解，說明該函式的用途
+2. 每個邏輯區塊（if / for / 重要運算）加上中文行內註解
+3. CONFIG 物件的每個欄位加上中文說明
+
+完成後請提供：
+1. 修改摘要：列出新增或修改了哪些函式 / 區塊
+2. 測試步驟：如何逐項驗收 Acceptance Criteria
 ```
 
 ---
@@ -262,6 +267,66 @@ Console 錯誤：
 - [ ] **中文錯誤提示** — 所有使用者看到的提示訊息使用中文
 - [ ] **console.log 清理** — 上線版本不留 debug 用的 `console.log`（開發中可保留）
 - [ ] **無硬編碼欄位名稱** — 欄位名稱只在 `CONFIG` 定義，函式內用變數引用
+- [ ] **函式註解存在** — 每個函式開頭有中文單行註解（見下方 💬 Code Comment Rules）
+- [ ] **邏輯區塊註解存在** — 重要的 if / for / 運算區塊有中文行內說明
+- [ ] **修改摘要已提供** — AI 回覆末尾附有本次修改的函式清單與測試步驟
+
+---
+
+## 💬 Code Comment Rules（程式碼註解規範）
+
+> **原則：註解說明「為什麼」和「在做什麼」，讓非工程師也能大致讀懂程式邏輯。**
+
+### 函式層級（每個函式開頭必須有）
+
+```javascript
+// 【用途】依採單號碼與數量生成不重複的四位流水號清單，並更新 localStorage 歷史
+function getNextSerial(poNumber, count) { ... }
+
+// 【用途】計算指定日期的 ISO 週數（週一為一週起始）
+function getISOWeek(date) { ... }
+
+// 【用途】倫飛：組合本週的 localStorage 歷史 key，格式為 YYYY-WWW
+function getLonflyWeekKey() { ... }
+```
+
+### 邏輯區塊層級（重要判斷 / 迴圈 / 運算必須有）
+
+```javascript
+// 若欄位包含箭頭符號，取最後一段作為有效值（表示資料有更新）
+if (arrowPattern.test(text)) {
+  return parts[parts.length - 1];
+}
+
+// 依 Q'ty 數量依序生成序號，流水號從上次歷史接續
+for (let i = 1; i <= qty; i++) {
+  snList.push(buildLonflySN(weekKey, lastSerial + i));
+}
+
+// 倫飛跨週時流水號重置：新的一週從 00001 重新計算
+const weekKey = getLonflyWeekKey();
+const lastSerial = historyModule.getLastSerial('lonfly', weekKey); // 新週預設為 0
+```
+
+### CONFIG 欄位層級（每個屬性加上行內說明）
+
+```javascript
+const CUSTOMERS = {
+  lonfly: {
+    label:        '倫飛',             // Tab 顯示名稱
+    sheetName:    '倫飛出貨',         // 出貨記錄總表中對應的 sheet 名稱
+    searchField:  'MO',               // 搜尋框比對的欄位名稱
+    snRule:       'LONFLY',           // 對應 SN_RULES 中的生成策略 key
+    exportFormat: 'LONFLY',           // 對應 EXPORT_FORMATS 中的輸出格式 key
+    specialModels: [ ... ],           // 特殊型號彈窗提示規則列表
+  },
+};
+```
+
+### 不需要加註解的情況
+- 一眼就懂的單行賦值（`const label = '營邦'`）
+- 標準 DOM 操作（`document.getElementById(...)`）
+- `console.log` 的暫時 debug 行
 
 ---
 
@@ -284,4 +349,4 @@ Console 錯誤：
 
 ---
 
-*Last updated: 2026-03-06*
+*Last updated: 2026-03-05*
