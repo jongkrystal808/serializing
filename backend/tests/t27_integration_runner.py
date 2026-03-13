@@ -1,0 +1,392 @@
+from __future__ import annotations
+
+import json
+import sys
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, List
+
+from fastapi.testclient import TestClient
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = PROJECT_ROOT / "backend"
+sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.services.history_service import history_service  # noqa: E402
+
+TEST_DB_PATH = BACKEND_ROOT / "data" / "sn_generator_t27.db"
+
+
+@dataclass
+class CaseResult:
+    case_id: str
+    title: str
+    passed: bool
+    details: str
+
+
+def assert_true(condition: bool, message: str) -> None:
+    if not condition:
+        raise AssertionError(message)
+
+
+def parse_success_json(response, expected_status: int = 200) -> dict:
+    assert_true(response.status_code == expected_status, f"HTTP 狀態不符，預期 {expected_status}，實際 {response.status_code}")
+    payload = response.json()
+    assert_true(payload.get("success") is True, f"API success 應為 true，實際 {payload.get('success')}")
+    assert_true(isinstance(payload.get("data"), dict), "API data 欄位應為 object")
+    return payload["data"]
+
+
+def parse_error_json(response, expected_status: int = 400, expected_code: str | None = None) -> dict:
+    assert_true(response.status_code == expected_status, f"HTTP 狀態不符，預期 {expected_status}，實際 {response.status_code}")
+    payload = response.json()
+    assert_true(payload.get("success") is False, f"API success 應為 false，實際 {payload.get('success')}")
+    error = payload.get("error") or {}
+    if expected_code:
+        assert_true(error.get("code") == expected_code, f"error.code 不符，預期 {expected_code}，實際 {error.get('code')}")
+    return payload
+
+
+def run_case(case_id: str, title: str, fn: Callable[[], str], results: List[CaseResult]) -> None:
+    try:
+        details = fn()
+        results.append(CaseResult(case_id=case_id, title=title, passed=True, details=details))
+    except Exception as error:  # noqa: BLE001
+        results.append(CaseResult(case_id=case_id, title=title, passed=False, details=str(error)))
+
+
+def setup_test_db() -> None:
+    TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if TEST_DB_PATH.exists():
+        TEST_DB_PATH.unlink()
+    history_service.db_path = str(TEST_DB_PATH)
+    history_service.initialize()
+
+
+def main() -> int:
+    setup_test_db()
+
+    from app.main import app  # noqa: WPS433,E402
+
+    client = TestClient(app)
+    sample_excel = PROJECT_ROOT / "tmp_t25.xlsx"
+    assert_true(sample_excel.exists(), f"找不到整合測試樣本檔：{sample_excel}")
+    excel_bytes = sample_excel.read_bytes()
+
+    def parse_excel(customer: str, sheet_name: str, parse_rules: str) -> dict:
+        response = client.post(
+            "/api/excel/parse",
+            data={
+                "customer": customer,
+                "sheet_name": sheet_name,
+                "parse_rules": parse_rules,
+            },
+            files={
+                "file": (
+                    sample_excel.name,
+                    excel_bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        return parse_success_json(response)
+
+    def case_yingbang_flow() -> str:
+        parsed = parse_excel("yingbang", "營邦出貨", "arrow")
+        assert_true(parsed["rows_count"] >= 1, "營邦解析結果 rows_count 應 >= 1")
+
+        generated_data = parse_success_json(
+            client.post(
+                "/api/sn/generate",
+                json={
+                    "customer": "yingbang",
+                    "key": "WO001",
+                    "qty": 2,
+                    "purchase_order": "PO001",
+                },
+            )
+        )
+        assert_true(generated_data["generated_count"] == 2, "營邦 generated_count 應為 2")
+        assert_true(generated_data["sn_list"][0] == "PO00110001", "營邦第一筆 SN 不符預期")
+        assert_true(generated_data["sn_list"][1] == "PO00110002", "營邦第二筆 SN 不符預期")
+
+        parse_success_json(
+            client.post(
+                "/api/history/upsert",
+                json={
+                    "customer": "yingbang",
+                    "key": "WO001",
+                    "increment": 0,
+                    "record": "2026-03-12-WO001",
+                },
+            )
+        )
+
+        export_response = client.post(
+            "/api/export",
+            json={
+                "customer": "yingbang",
+                "sn_rows": [
+                    {"SN": generated_data["sn_list"][0], "Datecode": "D2611", "PN": "PN001"},
+                    {"SN": generated_data["sn_list"][1], "Datecode": "D2611", "PN": "PN001"},
+                ],
+                "file_name": "營邦-SN.xls",
+            },
+        )
+        assert_true(export_response.status_code == 200, "營邦匯出應成功")
+        assert_true(len(export_response.content) > 0, "營邦匯出內容不可為空")
+
+        history_data = parse_success_json(client.get("/api/history/yingbang"))
+        entries = history_data["entries"]
+        matched = next((item for item in entries if item["key"] == "WO001"), None)
+        assert_true(bool(matched), "營邦歷史缺少 WO001")
+        assert_true(int(matched["last_serial"]) == 2, "營邦歷史流水號應為 2")
+
+        return "營邦：解析/生成/匯出/歷史查詢通過（key=工單 WO001）"
+
+    def case_lunfei_flow_with_week_reset() -> str:
+        parsed = parse_excel("lunfei", "倫飛出貨", "arrow")
+        assert_true(parsed["rows_count"] >= 1, "倫飛解析結果 rows_count 應 >= 1")
+
+        first = parse_success_json(
+            client.post(
+                "/api/sn/generate",
+                json={
+                    "customer": "lunfei",
+                    "key": "2026-W11",
+                    "qty": 2,
+                    "week_key": "2026-W11",
+                },
+            )
+        )
+        second = parse_success_json(
+            client.post(
+                "/api/sn/generate",
+                json={
+                    "customer": "lunfei",
+                    "key": "2026-W11",
+                    "qty": 1,
+                    "week_key": "2026-W11",
+                },
+            )
+        )
+        third = parse_success_json(
+            client.post(
+                "/api/sn/generate",
+                json={
+                    "customer": "lunfei",
+                    "key": "2026-W12",
+                    "qty": 1,
+                    "week_key": "2026-W12",
+                },
+            )
+        )
+        assert_true(first["previous_serial"] == 0 and first["current_serial"] == 2, "倫飛同週第一次生成結果不符")
+        assert_true(second["previous_serial"] == 2 and second["current_serial"] == 3, "倫飛同週接續結果不符")
+        assert_true(third["previous_serial"] == 0 and third["current_serial"] == 1, "倫飛跨週重置結果不符")
+
+        parse_success_json(
+            client.post(
+                "/api/history/upsert",
+                json={
+                    "customer": "lunfei",
+                    "key": "MO001",
+                    "increment": 0,
+                    "record": "2026-03-12-MO001",
+                },
+            )
+        )
+
+        export_response = client.post(
+            "/api/export",
+            json={
+                "customer": "lunfei",
+                "sn_rows": [{"SN": third["sn_list"][0]}],
+                "box_row": {
+                    "P/N": "PNL001",
+                    "加工WO#": "PRO001",
+                    "對應PCBA": "PCBA001",
+                    "工單": "LWO001",
+                    "Model": "BAG017-AAA",
+                    "日期": "2026/03/12",
+                },
+                "file_name": "倫飛-SN.xls",
+            },
+        )
+        assert_true(export_response.status_code == 200, "倫飛匯出應成功")
+        assert_true(len(export_response.content) > 0, "倫飛匯出內容不可為空")
+
+        history_data = parse_success_json(client.get("/api/history/lunfei"))
+        keys = {item["key"]: int(item["last_serial"]) for item in history_data["entries"]}
+        assert_true(keys.get("2026-W11") == 3, "倫飛 2026-W11 歷史流水號應為 3")
+        assert_true(keys.get("2026-W12") == 1, "倫飛 2026-W12 歷史流水號應為 1")
+
+        return "倫飛：同週接續與跨週重置通過（W11->W12）"
+
+    def case_bng_flow_with_count_validation() -> str:
+        parsed = parse_excel("bng", "超恩出貨", "trim")
+        assert_true(parsed["rows_count"] >= 1, "超恩解析結果 rows_count 應 >= 1")
+
+        generated_data = parse_success_json(
+            client.post(
+                "/api/sn/generate",
+                json={
+                    "customer": "bng",
+                    "key": "BMO001",
+                    "qty": 2,
+                    "provided_serials": ["1001", "1002"],
+                    "record": "2026-03-12-BMO001",
+                },
+            )
+        )
+        assert_true(generated_data["generated_count"] == 2, "超恩 generated_count 應為 2")
+
+        export_response = client.post(
+            "/api/export",
+            json={
+                "customer": "bng",
+                "sn_rows": [
+                    {"序號": "1001", "MAC Address": "001122334455", "UUID": "無", "BIOS": "BIOS1", "FW": "FW1"},
+                    {"序號": "1002", "MAC Address": "001122334456", "UUID": "無", "BIOS": "BIOS1", "FW": "FW1"},
+                ],
+                "box_row": {
+                    "PO": "BWO001",
+                    "Model": "ModelA",
+                    "料號": "PART001",
+                    "SN": "1001~1002",
+                    "思創PN": "PART001",
+                    "Date": "2026/03/12",
+                },
+                "file_name": "超恩-SN.xls",
+            },
+        )
+        assert_true(export_response.status_code == 200, "超恩匯出應成功")
+        assert_true(len(export_response.content) > 0, "超恩匯出內容不可為空")
+
+        history_data = parse_success_json(client.get("/api/history/bng"))
+        matched = next((item for item in history_data["entries"] if item["key"] == "BMO001"), None)
+        assert_true(bool(matched), "超恩歷史缺少 BMO001")
+        assert_true(int(matched["last_serial"]) == 2, "超恩歷史流水號應為 2")
+
+        return "超恩：解析/筆數驗證/匯出/歷史查詢通過（key=MO）"
+
+    def case_chg_flow() -> str:
+        parsed = parse_excel("chg", "KOYA出貨", "trim")
+        assert_true(parsed["rows_count"] >= 1, "KOYA 解析結果 rows_count 應 >= 1")
+
+        generated_data = parse_success_json(
+            client.post(
+                "/api/sn/generate",
+                json={
+                    "customer": "chg",
+                    "key": "CWO001",
+                    "qty": 2,
+                    "provided_serials": ["CWO001", "CWO001"],
+                    "record": "2026-03-12-CWO001",
+                },
+            )
+        )
+        assert_true(generated_data["generated_count"] == 2, "KOYA generated_count 應為 2")
+
+        export_response = client.post(
+            "/api/export",
+            json={
+                "customer": "chg",
+                "sn_rows": [
+                    {"工單": "CWO001", "PN": "KPN001"},
+                    {"工單": "CWO001", "PN": "KPN001"},
+                ],
+                "box_row": {
+                    "PO": "POC1",
+                    "PN": "KPN001",
+                    "full PN": "FULL001",
+                    "DDC PN": "KModel",
+                    "DDC LOT": "CWO001",
+                    "QTY": "20",
+                    "DATE": "2026/03/12",
+                },
+                "file_name": "KOYA-SN.xls",
+            },
+        )
+        assert_true(export_response.status_code == 200, "KOYA 匯出應成功")
+        assert_true(len(export_response.content) > 0, "KOYA 匯出內容不可為空")
+
+        history_data = parse_success_json(client.get("/api/history/chg"))
+        matched = next((item for item in history_data["entries"] if item["key"] == "CWO001"), None)
+        assert_true(bool(matched), "KOYA 歷史缺少 CWO001")
+        assert_true(int(matched["last_serial"]) == 2, "KOYA 歷史流水號應為 2")
+
+        return "KOYA：Label/Box 匯出與歷史查詢通過"
+
+    def case_failure_scenarios() -> str:
+        response_sheet_not_found = client.post(
+            "/api/excel/parse",
+            data={"customer": "yingbang", "sheet_name": "不存在的工作表", "parse_rules": "arrow"},
+            files={
+                "file": (
+                    sample_excel.name,
+                    excel_bytes,
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        parse_error_json(response_sheet_not_found, expected_status=400, expected_code="SHEET_NOT_FOUND")
+
+        response_mismatch = client.post(
+            "/api/sn/generate",
+            json={
+                "customer": "bng",
+                "key": "BMO001",
+                "qty": 2,
+                "provided_serials": ["only-one"],
+            },
+        )
+        parse_error_json(response_mismatch, expected_status=400, expected_code="INVALID_PROVIDED_SERIALS")
+
+        response_unsupported = client.get("/api/history/not_exists_customer")
+        parse_error_json(response_unsupported, expected_status=400, expected_code="UNSUPPORTED_CUSTOMER")
+
+        response_invalid_yingbang = client.post(
+            "/api/sn/generate",
+            json={
+                "customer": "yingbang",
+                "key": "WO001",
+                "qty": 1,
+            },
+        )
+        parse_error_json(response_invalid_yingbang, expected_status=400, expected_code="MISSING_PURCHASE_ORDER")
+
+        return "失敗情境：sheet 不存在 / 筆數不符 / customer 非法 / 缺 purchase_order 全部正確攔截"
+
+    results: List[CaseResult] = []
+    run_case("T27-01", "營邦完整流程（解析/生成/匯出/歷史）", case_yingbang_flow, results)
+    run_case("T27-02", "倫飛完整流程（含週重置）", case_lunfei_flow_with_week_reset, results)
+    run_case("T27-03", "超恩完整流程（區間展開與筆數驗證）", case_bng_flow_with_count_validation, results)
+    run_case("T27-04", "KOYA 完整流程（Label/Box 匯出）", case_chg_flow, results)
+    run_case("T27-05", "失敗情境測試", case_failure_scenarios, results)
+
+    passed_count = len([item for item in results if item.passed])
+    failed_count = len(results) - passed_count
+    summary = {
+        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "db_path": str(TEST_DB_PATH),
+        "passed": passed_count,
+        "failed": failed_count,
+        "results": [
+            {
+                "case_id": item.case_id,
+                "title": item.title,
+                "status": "PASS" if item.passed else "FAIL",
+                "details": item.details,
+            }
+            for item in results
+        ],
+    }
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0 if failed_count == 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -2,7 +2,7 @@
 
 **Project:** SN-GENERATOR（序號產生器）
 **Version:** 0.3.0
-**Last Updated:** 2026-03-11
+**Last Updated:** 2026-03-12
 
 ---
 
@@ -16,22 +16,7 @@
 
 ## 🔄 In Progress
 
-### 🧪 T27 — 全流程整合測試（新架構）
-**Module:** QA / E2E
-**Priority:** 🟡 Medium
-**Depends on:** T26
-
-**Sub-tasks:**
-- [ ] 營邦完整流程測試（解析/生成/匯出/歷史）
-- [ ] 倫飛完整流程測試（含週重置）
-- [ ] 超恩完整流程測試（區間展開與筆數驗證）
-- [ ] KOYA 完整流程測試（Label/Box 匯出）
-- [ ] 失敗情境測試（找不到 sheet、欄位錯誤、非法參數）
-
-**Acceptance Criteria:**
-- 四客戶核心場景全部通過
-- 無阻斷性錯誤（P0/P1）
-- 測試結果可追溯（記錄於 Test-Report）
+（目前無）
 
 ---
 
@@ -56,6 +41,10 @@
 ---
 
 ## ✅ Done
+
+### ✅ T27 — 全流程整合測試（新架構）（完成：2026-03-12）
+**Module:** QA / E2E
+**Notes:** 已新增 `backend/tests/t27_integration_runner.py` 可重跑整合測試，涵蓋四客戶核心流程（解析/生成/匯出/歷史）與失敗情境（找不到 sheet、provided_serials 筆數不符、customer 非法、營邦缺 purchase_order）。測試結果已記錄於 `Test-Report.md`，本次執行 5/5 全通過，無 P0/P1 阻斷錯誤。
 
 ### ✅ T25 — 前端改為呼叫 FastAPI API（完成：2026-03-11）
 **Module:** Frontend / API Integration
@@ -172,17 +161,16 @@
 | Phase 3（新增超恩） | 1 | 1 | 0 | 0 |
 | Phase 4（新增 KOYA） | 1 | 1 | 0 | 0 |
 | Phase 5（全客戶規則統一） | 1 | 1 | 0 | 0 |
-| Phase 6（Nginx + FastAPI） | 9 | 7 | 1 | 1 |
-| **Total** | **27** | **25** | **1** | **1** |
+| Phase 6（Nginx + FastAPI） | 9 | 8 | 0 | 1 |
+| **Total** | **27** | **26** | **0** | **1** |
 
 ---
 
 ## 🗓️ Suggested Build Order（Phase 6）
 
 ```
-T25 前端 API 串接
-  └─ T27 全流程整合測試
-       └─ T28 部署與交接文件
+T27 全流程整合測試
+  └─ T28 部署與交接文件
 ```
 
 ---
@@ -195,8 +183,8 @@ T25 前端 API 串接
 3. 相關現況程式碼（前端或 backend）
 
 每個 Task 建議**單獨交給 AI 執行**，避免一次處理多個模組。
-目前請從 **T25** 開始執行，完成並驗證後再進到下一個 Task。
+目前請從 **T28** 開始執行，完成並驗證後再進到下一個 Task。
 
 ---
 
-*Last updated: 2026-03-11*
+*Last updated: 2026-03-12*
