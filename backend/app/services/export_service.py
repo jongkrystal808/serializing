@@ -16,7 +16,7 @@ EXPORT_HEADERS: Dict[str, Dict[str, List[str]]] = {
         "box": ["P/N", "加工WO#", "對應PCBA", "工單", "Model", "日期"],
     },
     "bng": {
-        "SN": ["序號", "MAC Address", "UUID", "BIOS", "FW"],
+        "SN": ["序號", "MAC Address", "uuid1", "uuid2", "BIOS", "FW"],
         "BOX": ["PO", "Model", "料號", "SN", "思創PN", "Date"],
     },
     "chg": {

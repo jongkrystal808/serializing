@@ -2,7 +2,7 @@
 
 **Project:** SN-GENERATOR（序號產生器）
 **Version:** 0.2.2
-**Last Updated:** 2026-03-10
+**Last Updated:** 2026-03-13
 
 ---
 
@@ -23,6 +23,43 @@
 ---
 
 ## ✅ Resolved Bugs
+
+### BUG-20260313-001 — 超恩匯出 UUID 欄位為空或未正確拆欄
+
+**Status:** ✅ Resolved
+**Date Found:** 2026-03-13
+**Found By:** 使用者
+**Module:** 超恩 / ExcelExport / Backend ExportService
+**Severity:** 🔴 Critical
+
+---
+
+**symptom（症狀）:**
+> 超恩匯出檔原本 UUID 欄位為空；修正後改成 `uuid1/uuid2` 時，仍出現整串 UUID 全落在 `uuid1`、`uuid2` 為空。
+
+**Steps to Reproduce（重現步驟）:**
+1. 超恩頁籤查詢 MO
+2. 點「生成序號 & 匯出」
+3. 開啟 SN sheet，檢查 UUID 相關欄位
+
+**Expected Result（預期結果）:**
+> UUID 應拆成兩欄：`uuid1`（前15位）與 `uuid2`（後17個 F）。
+
+**Actual Result（實際結果）:**
+> 一開始因前後端欄位不一致導致 UUID 欄位空白；後續又因拆分規則誤設為前16位，造成部分資料 `uuid2` 仍為空。
+
+**Root Cause（根本原因）:**
+> 1) 前端已改 `uuid1/uuid2`，但後端匯出模板仍讀 `UUID` 單欄。  
+> 2) UUID 拆分規則與實際資料格式不符（現場格式為前15位 + 後17個 F）。
+
+**Fix（修復方式）:**
+> 1) 前後端統一超恩 SN 匯出欄位為 `序號/MAC Address/uuid1/uuid2/BIOS/FW`。  
+> 2) UUID 拆分規則調整為 `^([0-9A-F]{15})(F{17})$`。  
+> 3) 更新整合測試超恩匯出樣本欄位為 `uuid1/uuid2`。
+
+**Date Resolved:** 2026-03-13
+
+---
 
 ### BUG-20260310-001 — 匯出 Excel 匯入 BarTender 失敗（iFK -> iBT 轉型錯誤）
 
@@ -237,4 +274,4 @@
 
 ---
 
-*Last updated: 2026-03-10*
+*Last updated: 2026-03-13*

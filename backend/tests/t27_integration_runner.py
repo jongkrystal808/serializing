@@ -248,8 +248,8 @@ def main() -> int:
             json={
                 "customer": "bng",
                 "sn_rows": [
-                    {"序號": "1001", "MAC Address": "001122334455", "UUID": "無", "BIOS": "BIOS1", "FW": "FW1"},
-                    {"序號": "1002", "MAC Address": "001122334456", "UUID": "無", "BIOS": "BIOS1", "FW": "FW1"},
+                    {"序號": "1001", "MAC Address": "001122334455", "uuid1": "無", "uuid2": "", "BIOS": "BIOS1", "FW": "FW1"},
+                    {"序號": "1002", "MAC Address": "001122334456", "uuid1": "無", "uuid2": "", "BIOS": "BIOS1", "FW": "FW1"},
                 ],
                 "box_row": {
                     "PO": "BWO001",

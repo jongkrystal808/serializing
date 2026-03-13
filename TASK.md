@@ -2,7 +2,7 @@
 
 **Project:** SN-GENERATOR（序號產生器）
 **Version:** 0.3.0
-**Last Updated:** 2026-03-12
+**Last Updated:** 2026-03-13
 
 ---
 
@@ -41,6 +41,10 @@
 ---
 
 ## ✅ Done
+
+### ✅ T29 — 超恩 UUID 匯出欄位拆分（完成：2026-03-13）
+**Module:** 超恩 / ExcelExport / Backend ExportTemplate
+**Notes:** 依現場需求將超恩 SN sheet 的 UUID 單欄改為雙欄 `uuid1`、`uuid2`；拆分規則改為 `uuid1=前15位`、`uuid2=後17個F`。同步調整前端匯出組裝、後端 `EXPORT_HEADERS`、以及整合測試樣本欄位，避免前後端欄位不一致造成 UUID 空白。
 
 ### ✅ T27 — 全流程整合測試（新架構）（完成：2026-03-12）
 **Module:** QA / E2E
@@ -162,7 +166,8 @@
 | Phase 4（新增 KOYA） | 1 | 1 | 0 | 0 |
 | Phase 5（全客戶規則統一） | 1 | 1 | 0 | 0 |
 | Phase 6（Nginx + FastAPI） | 9 | 8 | 0 | 1 |
-| **Total** | **27** | **26** | **0** | **1** |
+| Phase 7（Hotfix） | 1 | 1 | 0 | 0 |
+| **Total** | **28** | **27** | **0** | **1** |
 
 ---
 
@@ -187,4 +192,4 @@ T27 全流程整合測試
 
 ---
 
-*Last updated: 2026-03-12*
+*Last updated: 2026-03-13*

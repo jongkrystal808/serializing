@@ -336,11 +336,12 @@ export function exportBngExcel(bundle, workOrderInput) {
 
   const boxRecord = bundle?.boxRecord || {};
   const snRows = [
-    ["序號", "MAC Address", "UUID", "BIOS", "FW"],
+    ["序號", "MAC Address", "uuid1", "uuid2", "BIOS", "FW"],
     ...snRowsData.map((row) => [
       String(row["序號"] ?? ""),
       String(row["MAC Address"] ?? ""),
-      String(row.UUID ?? ""),
+      String(row.uuid1 ?? ""),
+      String(row.uuid2 ?? ""),
       String(row.BIOS ?? ""),
       String(row.FW ?? "")
     ])
@@ -596,6 +597,28 @@ function expandUuidRange(rawValue) {
   return { normalized: `${start} ~ ${end}`, values };
 }
 
+// 【用途】超恩匯出時將 UUID 拆成兩欄：uuid1(前15碼) + uuid2(後17個F)
+function splitBngUuidForExport(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "無") {
+    return {
+      uuid1: text,
+      uuid2: ""
+    };
+  }
+  const matched = text.match(/^([0-9A-F]{15})(F{17})$/i);
+  if (!matched) {
+    return {
+      uuid1: text,
+      uuid2: ""
+    };
+  }
+  return {
+    uuid1: matched[1].toUpperCase(),
+    uuid2: matched[2].toUpperCase()
+  };
+}
+
 export function generateBngSerialBundle(args) {
   const workOrder = String(args?.workOrder ?? "").trim();
   const model = String(args?.model ?? "").trim();
@@ -636,13 +659,17 @@ export function generateBngSerialBundle(args) {
 
   const totalRows = Math.max(snRange.values.length, macRange.values.length, uuidRange.values.length || 0);
   const uuidFallback = uuidRange.values.length === 0 ? "無" : "";
-  const snRows = Array.from({ length: totalRows }, (_, index) => ({
-    "序號": snRange.values[index] || "",
-    "MAC Address": macRange.values[index] || "",
-    UUID: uuidRange.values[index] || uuidFallback,
-    BIOS: index < qty ? bios : "",
-    FW: index < qty ? fw : ""
-  }));
+  const snRows = Array.from({ length: totalRows }, (_, index) => {
+    const uuidParts = splitBngUuidForExport(uuidRange.values[index] || uuidFallback);
+    return {
+      "序號": snRange.values[index] || "",
+      "MAC Address": macRange.values[index] || "",
+      uuid1: uuidParts.uuid1,
+      uuid2: uuidParts.uuid2,
+      BIOS: index < qty ? bios : "",
+      FW: index < qty ? fw : ""
+    };
+  });
 
   const boxRecord = {
     PO: workOrder,
