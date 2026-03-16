@@ -336,12 +336,13 @@ export function exportBngExcel(bundle, workOrderInput) {
 
   const boxRecord = bundle?.boxRecord || {};
   const snRows = [
-    ["序號", "MAC Address", "uuid1", "uuid2", "BIOS", "FW"],
+    ["序號", "MAC Address", "uuid1", "uuid2", "機種名稱", "BIOS", "FW"],
     ...snRowsData.map((row) => [
       String(row["序號"] ?? ""),
       String(row["MAC Address"] ?? ""),
       String(row.uuid1 ?? ""),
       String(row.uuid2 ?? ""),
+      String(row["機種名稱"] ?? ""),
       String(row.BIOS ?? ""),
       String(row.FW ?? "")
     ])
@@ -622,6 +623,7 @@ function splitBngUuidForExport(value) {
 export function generateBngSerialBundle(args) {
   const workOrder = String(args?.workOrder ?? "").trim();
   const model = String(args?.model ?? "").trim();
+  const normalizedModel = formatBngBoxModel(model);
   const systronPn = String(args?.systronPn ?? "").trim();
   const partNo = String(args?.partNo ?? "").trim();
   const dateText = formatBngDateText(args?.dateText);
@@ -666,6 +668,7 @@ export function generateBngSerialBundle(args) {
       "MAC Address": macRange.values[index] || "",
       uuid1: uuidParts.uuid1,
       uuid2: uuidParts.uuid2,
+      "機種名稱": index < qty ? normalizedModel : "",
       BIOS: index < qty ? bios : "",
       FW: index < qty ? fw : ""
     };
@@ -673,7 +676,7 @@ export function generateBngSerialBundle(args) {
 
   const boxRecord = {
     PO: workOrder,
-    Model: formatBngBoxModel(model),
+    Model: normalizedModel,
     "料號": partNo,
     SN: snRange.normalized,
     "思創PN": systronPn || model,

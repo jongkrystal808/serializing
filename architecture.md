@@ -1,8 +1,8 @@
 # Project Architecture
 
 **Project:** SN-GENERATOR（序號產生器）  
-**Version:** 0.3.0  
-**Last Updated:** 2026-03-12
+**Version:** 0.3.1  
+**Last Updated:** 2026-03-13
 
 ---
 
@@ -108,6 +108,11 @@ SN-GENERATOR/
 2. 表格顯示 `serial_history.last_serial`，前端格式化為 `N（共 N 筆）`。
 3. 單筆重置呼叫 `POST /api/history/reset`。
 
+### 4.4 預覽備註槽（四客戶共用）
+1. 前端在預覽窗格的「頁籤列右側」渲染備註槽（`preview-note-slot`）。
+2. 備註內容優先讀 `CUSTOMERS.{key}.previewNoteHtml`，若未設定則讀 `previewNote`。
+3. 現場可直接改 `index.html` 的 `CUSTOMERS` 設定，不需改動 `ui.js`。
+
 ---
 
 ## 5. Backend API Design
@@ -183,6 +188,9 @@ Base prefix：`/api`
 - SN/UUID/MAC 由區間展開（前端計算），後端僅驗證 provided_serials 筆數
 - 生成遞增 key：MO
 - 匯出：雙 sheet（`SN` + `BOX`）
+- `SN` sheet 欄位：`序號 / MAC Address / uuid1 / uuid2 / 機種名稱 / BIOS / FW`
+- UUID 拆欄規則：`uuid1 = 前 15 碼`、`uuid2 = 後 17 個 F`
+- `機種名稱` 與 BOX 的 `Model` 同規則，遇到 `" 1."` 後截斷；且 `SN` sheet 僅前 `生產數量` 列填入，超出列留空
 
 ### 7.4 KOYA
 - label 依數量重複列（前端組裝）
@@ -236,6 +244,10 @@ Base prefix：`/api`
 - 營邦以工單、超恩以 MO、倫飛維持週別 key、KOYA 維持工單
 - 歷史面板欄位命名與現場語意一致
 
+### ADR-005: 預覽備註改為客戶設定驅動（已落地）
+- 四客戶共用同一套備註渲染區塊
+- 備註內容集中在 `index.html` 的 `CUSTOMERS` 設定，現場調整成本最低
+
 ---
 
 ## 11. Version History
@@ -246,6 +258,10 @@ Base prefix：`/api`
   - 補充「一次上傳共用 Excel」流程
   - 更新歷史 key 規則（營邦=工單、超恩=MO）
   - 明確化歷史欄位顯示來源（`last_serial`）
+- **0.3.1**（2026-03-13）：
+  - 超恩 `SN` sheet 改為 `uuid1/uuid2` 拆欄與 `機種名稱` 欄位
+  - UUID 拆分規則明確化為 `前15碼 + 後17個F`
+  - 新增四客戶預覽備註槽，改由 `CUSTOMERS.previewNote` / `previewNoteHtml` 驅動
 
 ---
 

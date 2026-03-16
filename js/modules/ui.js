@@ -75,6 +75,33 @@ function renderHistoryPane(workOrderHistory) {
   `;
 }
 
+function renderPreviewNoteSlot(customerKey) {
+  const key = String(customerKey ?? "").trim();
+  const profile = window.CUSTOMERS?.[key] || {};
+  const htmlNote = String(profile.previewNoteHtml ?? "").trim();
+  if (htmlNote) {
+    return `<div class="preview-note-slot">${htmlNote}</div>`;
+  }
+  const textNote = String(profile.previewNote ?? "").trim();
+  if (textNote) {
+    return `<div class="preview-note-slot">${escapeHtml(textNote)}</div>`;
+  }
+  return `<div class="preview-note-slot preview-note-placeholder">（可在 index.html 的 CUSTOMERS.${escapeHtml(key)}.previewNote 設定備註）</div>`;
+}
+
+function renderPreviewTabsWithNote(customerKey, hasHistory) {
+  return `
+    <div class="preview-tabs-row">
+      <div class="preview-tabs">
+        <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
+        <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
+        ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
+      </div>
+      ${renderPreviewNoteSlot(customerKey)}
+    </div>
+  `;
+}
+
 function renderPreviewGroup(title, items) {
   return `
     <section class="card">
@@ -164,11 +191,7 @@ export function renderSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(ddcPartNo)}</p>
       <p class="preview-subtitle">${escapeHtml(productName)}</p>
     </div>
-    <div class="preview-tabs">
-      <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
-      <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
-      ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
-    </div>
+    ${renderPreviewTabsWithNote("yingbang", hasHistory)}
     <div class="preview-pane active" data-pane="preview">
       <div class="preview-grid">
         ${renderPreviewItem("SN（第一筆預覽）", previewSN, true)}
@@ -394,11 +417,7 @@ export function renderLunfeiSearchSuccess(ui, args) {
     <div class="preview-headline">
       <p class="preview-title">Model：${escapeHtml(model)}</p>
     </div>
-    <div class="preview-tabs">
-      <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
-      <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
-      ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
-    </div>
+    ${renderPreviewTabsWithNote("lunfei", hasHistory)}
     <div class="preview-pane active" data-pane="preview">
       <div class="preview-grid">
         ${renderPreviewItem("SN（第一筆預覽）", previewSN, true)}
@@ -488,11 +507,7 @@ export function renderBngSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(model)}</p>
       <p class="preview-subtitle">機種料號：${escapeHtml(partNo)}｜日期：${escapeHtml(date)}</p>
     </div>
-    <div class="preview-tabs">
-      <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
-      <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
-      ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
-    </div>
+    ${renderPreviewTabsWithNote("bng", hasHistory)}
     <div class="preview-pane active" data-pane="preview">
       <div class="bng-preview-groups">
         ${snGroup}
@@ -561,11 +576,7 @@ export function renderChgSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(model)}</p>
       <p class="preview-subtitle">工單：${escapeHtml(workOrder)}｜PO：${escapeHtml(po)}｜批量：${escapeHtml(batch)}</p>
     </div>
-    <div class="preview-tabs">
-      <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
-      <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
-      ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
-    </div>
+    ${renderPreviewTabsWithNote("chg", hasHistory)}
     <div class="preview-pane active" data-pane="preview">
       ${labelGroup}
       ${boxLabelGroup}

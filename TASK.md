@@ -1,7 +1,7 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.0
+**Version:** 0.3.1
 **Last Updated:** 2026-03-13
 
 ---
@@ -41,6 +41,14 @@
 ---
 
 ## ✅ Done
+
+### ✅ T31 — 四客戶預覽窗格新增可配置備註槽（完成：2026-03-13）
+**Module:** UI / Customer Config
+**Notes:** 在四個客戶預覽窗格的頁籤列右側新增備註區塊；備註內容改由 `index.html` 的 `CUSTOMERS.{key}.previewNote / previewNoteHtml` 控制，現場可直接改文字而不需改程式碼。同步補上樣式與行動版排版。
+
+### ✅ T30 — 超恩 SN 匯出新增機種名稱欄位（完成：2026-03-13）
+**Module:** 超恩 / ExcelExport / Backend ExportTemplate
+**Notes:** 超恩 `SN` sheet 新增 `機種名稱` 欄位；值與 BOX `Model` 同規則，遇到 `' 1.'` 後截斷。`機種名稱` 欄位只填前 `生產數量` 筆（其餘留空），並同步更新後端匯出模板與整合測試樣本。
 
 ### ✅ T29 — 超恩 UUID 匯出欄位拆分（完成：2026-03-13）
 **Module:** 超恩 / ExcelExport / Backend ExportTemplate
@@ -166,8 +174,8 @@
 | Phase 4（新增 KOYA） | 1 | 1 | 0 | 0 |
 | Phase 5（全客戶規則統一） | 1 | 1 | 0 | 0 |
 | Phase 6（Nginx + FastAPI） | 9 | 8 | 0 | 1 |
-| Phase 7（Hotfix） | 1 | 1 | 0 | 0 |
-| **Total** | **28** | **27** | **0** | **1** |
+| Phase 7（Hotfix） | 3 | 3 | 0 | 0 |
+| **Total** | **30** | **29** | **0** | **1** |
 
 ---
 
