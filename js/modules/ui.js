@@ -300,6 +300,29 @@ function formatBngModelForBox(modelValue) {
   return text.slice(0, markerIndex).trim();
 }
 
+function renderTitleWithHelp(title, topic) {
+  const titleText = String(title ?? "").trim();
+  const topicText = String(topic ?? "").trim();
+  const safeTitle = escapeHtml(titleText);
+  const safeTopic = escapeHtml(topicText);
+  const safeAriaLabel = escapeHtml(`${titleText || "區塊"}使用說明`);
+  if (!topicText) {
+    return `<h2>${safeTitle}</h2>`;
+  }
+  return `
+    <h2 class="title-with-help">
+      ${safeTitle}
+      <button
+        type="button"
+        class="help-inline-trigger"
+        data-help-topic="${safeTopic}"
+        aria-label="${safeAriaLabel}"
+        title="查看使用說明"
+      >ⅰ</button>
+    </h2>
+  `;
+}
+
 export function updateStatus(ui, message, isError = false, isLoading = false) {
   ui.status.textContent = message;
   if (isError) {
@@ -315,7 +338,7 @@ export function updateStatus(ui, message, isError = false, isLoading = false) {
 
 export function renderLoadResult(ui, rows, fileName) {
   ui.previewPanel.innerHTML = `
-    <h2>預覽窗格</h2>
+    ${renderTitleWithHelp("預覽窗格", "preview-panel")}
     <p>來源檔案：${fileName}</p>
     <p>已載入 ${rows.length} 筆資料（工作表：${CONFIG.SHEET_NAME}）。</p>
   `;
@@ -323,7 +346,7 @@ export function renderLoadResult(ui, rows, fileName) {
 
 export function renderSearchNotFound(ui, query) {
   ui.previewPanel.innerHTML = `
-    <h2>預覽窗格</h2>
+    ${renderTitleWithHelp("預覽窗格", "preview-panel")}
     <div class="error-box">找不到工單：${escapeHtml(query)}</div>
   `;
 }
@@ -350,7 +373,7 @@ export function renderSearchSuccess(ui, args) {
   const customTabs = getConfiguredPreviewTabs("yingbang");
 
   ui.previewPanel.innerHTML = `
-    <h2>預覽窗格</h2>
+    ${renderTitleWithHelp("預覽窗格", "preview-panel")}
     <p>查詢工單：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
     <div class="preview-headline">
       <p class="preview-title">${escapeHtml(ddcPartNo)}</p>
@@ -589,7 +612,7 @@ export function renderLunfeiSearchNotFound(ui, query) {
     return;
   }
   ui.lunfeiPreviewPanel.innerHTML = `
-    <h2>倫飛預覽窗格</h2>
+    ${renderTitleWithHelp("倫飛預覽窗格", "preview-panel")}
     <div class="error-box">找不到 MO：${escapeHtml(query)}</div>
   `;
 }
@@ -615,7 +638,7 @@ export function renderLunfeiSearchSuccess(ui, args) {
   const customTabs = getConfiguredPreviewTabs("lunfei");
 
   ui.lunfeiPreviewPanel.innerHTML = `
-    <h2>倫飛預覽窗格</h2>
+    ${renderTitleWithHelp("倫飛預覽窗格", "preview-panel")}
     <p>查詢 MO：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
     <div class="preview-headline">
       <p class="preview-title">Model：${escapeHtml(model)}</p>
@@ -649,7 +672,7 @@ export function renderBngSearchNotFound(ui, query) {
     return;
   }
   ui.bngPreviewPanel.innerHTML = `
-    <h2>超恩預覽窗格</h2>
+    ${renderTitleWithHelp("超恩預覽窗格", "preview-panel")}
     <div class="error-box">查無對應資料，請確認 MO 是否正確（${escapeHtml(query)}）</div>
   `;
 }
@@ -706,7 +729,7 @@ export function renderBngSearchSuccess(ui, args) {
   ]);
 
   ui.bngPreviewPanel.innerHTML = `
-    <h2>超恩預覽窗格</h2>
+    ${renderTitleWithHelp("超恩預覽窗格", "preview-panel")}
     <p>查詢 MO：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
     <div class="preview-headline">
       <p class="preview-title">${escapeHtml(model)}</p>
@@ -740,7 +763,7 @@ export function renderChgSearchNotFound(ui, query) {
     return;
   }
   ui.chgPreviewPanel.innerHTML = `
-    <h2>KOYA 預覽窗格</h2>
+    ${renderTitleWithHelp("KOYA 預覽窗格", "preview-panel")}
     <div class="error-box">查無對應資料，請確認工單是否正確（${escapeHtml(query)}）</div>
   `;
 }
@@ -777,7 +800,7 @@ export function renderChgSearchSuccess(ui, args) {
   ]);
 
   ui.chgPreviewPanel.innerHTML = `
-    <h2>KOYA 預覽窗格</h2>
+    ${renderTitleWithHelp("KOYA 預覽窗格", "preview-panel")}
     <p>查詢工單：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
     <div class="preview-headline">
       <p class="preview-title">${escapeHtml(model)}</p>
@@ -806,7 +829,7 @@ export function renderHmgSearchNotFound(ui, query) {
     return;
   }
   ui.hmgPreviewPanel.innerHTML = `
-    <h2>赫星 預覽窗格</h2>
+    ${renderTitleWithHelp("赫星 預覽窗格", "preview-panel")}
     <div class="error-box">查無對應機種，請確認 Model 關鍵字是否正確（${escapeHtml(query)}）</div>
   `;
 }
@@ -837,7 +860,7 @@ export function renderHmgSearchSuccess(ui, args) {
     : `<p class="preview-empty-note">目前可顯示欄位皆為空值。</p>`;
 
   ui.hmgPreviewPanel.innerHTML = `
-    <h2>赫星 預覽窗格</h2>
+    ${renderTitleWithHelp("赫星 預覽窗格", "preview-panel")}
     <p>查詢 Model：${escapeHtml(query)}（命中 ${matchCount} 筆）</p>
     <div class="preview-headline">
       <p class="preview-title">${escapeHtml(model)}</p>
@@ -866,7 +889,7 @@ export function renderClgSearchNotFound(ui, query) {
     return;
   }
   ui.clgPreviewPanel.innerHTML = `
-    <h2>Cubepilot 預覽窗格</h2>
+    ${renderTitleWithHelp("Cubepilot 預覽窗格", "preview-panel")}
     <div class="error-box">查無對應機種，請確認機種名是否正確（${escapeHtml(query)}）</div>
   `;
 }
@@ -899,7 +922,7 @@ export function renderClgSearchSuccess(ui, args) {
   const serialPreviewHtml = renderClgPlannedSerialPreview(plannedSerialPreview);
 
   ui.clgPreviewPanel.innerHTML = `
-    <h2>Cubepilot 預覽窗格</h2>
+    ${renderTitleWithHelp("Cubepilot 預覽窗格", "preview-panel")}
     <p>查詢機種名：${escapeHtml(query)}（命中 ${matchCount} 筆）</p>
     <div class="preview-headline">
       <p class="preview-title">${escapeHtml(model)}</p>

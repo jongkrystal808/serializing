@@ -71,6 +71,32 @@ const SHARED_PARSE_FALLBACKS = {
 };
 const PREVIEW_CUSTOM_TABS_STORAGE_KEY = "sn_preview_custom_tabs";
 const SHARED_CUSTOMER_KEYS = ["yingbang", "lunfei", "bng", "chg"];
+const USAGE_HELP_MESSAGES = {
+  "customer-tabs": [
+    "客戶頁籤使用方式：",
+    "1. 先點選上方客戶頁籤切換當前作業客戶。",
+    "2. 切換後，下方資料來源與查詢規則會跟著該客戶改變。",
+    "3. 營邦/倫飛/超恩/KOYA 共用上傳檔；赫星與 Cubepilot 為獨立上傳。"
+  ].join("\n"),
+  "source-config": [
+    "資料來源設定使用方式：",
+    "1. 點擊「上傳 ... Excel」選擇來源檔案。",
+    "2. 上傳完成後，狀態列會顯示載入結果。",
+    "3. 需要回看歷史時，點「查看歷史」。"
+  ].join("\n"),
+  "query-actions": [
+    "查詢與操作使用方式：",
+    "1. 先完成上傳，再輸入工單 / MO / Model。",
+    "2. 點「解析工單」或「查詢機種」（也可按 Enter）。",
+    "3. 查詢成功後可點「生成序號 & 匯出」或對應匯出按鈕。"
+  ].join("\n"),
+  "preview-panel": [
+    "預覽窗格使用方式：",
+    "1. 這裡會顯示查詢命中的資料與序號預覽。",
+    "2. 可切換「預覽 / 表格內容 / 生成歷史」頁籤。",
+    "3. 可使用「複製」按鈕或點表格儲存格快速複製內容。"
+  ].join("\n")
+};
 
 function buildParseTarget(customerKey) {
   const fallback = SHARED_PARSE_FALLBACKS[customerKey] || {};
@@ -210,6 +236,18 @@ function getSafeErrorMessage(error) {
     return error.message;
   }
   return "發生未知錯誤";
+}
+
+function onUsageHelpClick(event) {
+  const trigger = event.target?.closest?.(".help-inline-trigger[data-help-topic]");
+  if (!trigger) {
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  const topic = String(trigger.getAttribute("data-help-topic") ?? "").trim();
+  const message = USAGE_HELP_MESSAGES[topic] || "目前沒有可用的使用說明。";
+  window.alert(message);
 }
 
 function getHistoryEntries(snapshot) {
@@ -2949,6 +2987,7 @@ function initEvents() {
   ui.chgFileInput.addEventListener("change", onChgFileSelected);
   ui.hmgFileInput.addEventListener("change", onHmgFileSelected);
   ui.clgFileInput.addEventListener("change", onClgFileSelected);
+  document.addEventListener("click", onUsageHelpClick);
 }
 
 async function main() {

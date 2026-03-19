@@ -41,6 +41,41 @@ body {
   letter-spacing: 0.2px;
 }
 
+.title-with-help {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.help-inline-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid #98a2b3;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #344054;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.help-inline-trigger:hover {
+  border-color: #175cd3;
+  background: #eff8ff;
+  color: #175cd3;
+}
+
+.help-inline-trigger:focus-visible {
+  outline: 2px solid #175cd3;
+  outline-offset: 2px;
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;
