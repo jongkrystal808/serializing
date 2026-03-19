@@ -15,6 +15,7 @@
         title: "SN-GENERATOR 營邦序號工具",
         sourceHint: "來源：使用者上傳 Excel（Sheet：營邦出貨）",
         previewNote: "※ 可在 index.html 的 CUSTOMERS.yingbang.previewNote 自訂這裡的備註",
+        previewCustomTabs: [],
         searchPlaceholder: "輸入工單號",
         generationHistoryKey: "sn_generation_history_by_work_order",
         serialRule: { type: "po_plus_fixed", fixed: "1", padLength: 4 },
@@ -42,9 +43,11 @@
         label: "倫飛",
         sheetName: "倫飛出貨",
         parseRules: ["arrow"],
+
         title: "SN-GENERATOR 倫飛序號工具",
         sourceHint: "來源：使用者上傳 Excel（Sheet：倫飛出貨）",
         previewNote: "※ 大箱100/1, 小箱50/1 \nBAG017下的&BAG159, 無法鐳雕,需要列印所有貼紙(除外箱)\nmac貼紙客人提供有序號的都不用印外箱貼紙/大外箱",
+        previewCustomTabs: [],
         searchPlaceholder: "輸入 MO",
         generationHistoryKey: "sn_generation_history_by_mo",
         serialRule: { type: "lunfei_weekly" },
@@ -77,6 +80,7 @@
         title: "SN-GENERATOR 超恩序號工具",
         sourceHint: "來源：使用者上傳 Excel（Sheet：超恩出貨）",
         previewNote: "※ 可在 index.html 的 CUSTOMERS.bng.previewNote 自訂這裡的備註",
+        previewCustomTabs: [],
         searchPlaceholder: "輸入 MO",
         generationHistoryKey: "sn_generation_history_by_work_order",
         serialRule: { type: "range_expand" },
@@ -121,6 +125,7 @@
         title: "SN-GENERATOR KOYA 標籤工具",
         sourceHint: "來源：使用者上傳 Excel（Sheet：KOYA出貨）",
         previewNote: "※ 可在 index.html 的 CUSTOMERS.chg.previewNote 自訂這裡的備註",
+        previewCustomTabs: [],
         searchPlaceholder: "輸入工單",
         generationHistoryKey: "sn_generation_history_by_work_order",
         serialRule: { type: "none" },
@@ -150,6 +155,60 @@
           TAIL_QTY: ["尾數數量"],
           FULL_PN: ["full PN", "FULL PN", "Full PN"]
         }
+      },
+      hmg: {
+        key: "hmg",
+        label: "赫星",
+        sheetName: "Sheet1",
+        parseRules: ["none"],
+        title: "SN-GENERATOR 赫星資料匯出工具",
+        sourceHint: "來源：使用者上傳 Excel（Sheet：Sheet1）",
+        previewNote: "",
+        previewCustomTabs: [],
+        searchPlaceholder: "輸入 Model（可關鍵字）",
+        generationHistoryKey: "sn_generation_history_by_model",
+        serialRule: { type: "none" },
+        exportStrategy: "single_sn",
+        exportColumns: ["Model", "PN", "EAN Code", "PCBA"],
+        columns: {
+          MODEL: "Model",
+          PN: "PN",
+          EAN: "EAN Code",
+          PCBA: "PCBA/Accessories      機種名"
+        },
+        columnAliases: {
+          MODEL: ["Model", "MODEL", "model"],
+          PN: ["PN", "P/N", "PK", "料號"],
+          EAN: ["EAN Code", "EAN", "條碼"],
+          PCBA: ["PCBA/Accessories      機種名", "PCBA/Accessories 機種名", "PCB/AAccessories", "PCBA"]
+        }
+      },
+      clg: {
+        key: "clg",
+        label: "Cubepilot",
+        sheetName: "Sheet1",
+        parseRules: ["trim"],
+        title: "SN-GENERATOR Cubepilot 序號工具",
+        sourceHint: "來源：使用者上傳 Excel（Sheet：Sheet1）",
+        previewNote: "",
+        previewCustomTabs: [],
+        searchPlaceholder: "輸入機種名",
+        generationHistoryKey: "sn_generation_history_by_model",
+        serialRule: { type: "manual_base_serial" },
+        exportStrategy: "single_sn",
+        exportColumns: ["SN"],
+        columns: {
+          MODEL: "機種名",
+          QRCODE: "小張QRCODE",
+          CUBE_STICKER: "Cube測試用貼紙",
+          NOTE: "note"
+        },
+        columnAliases: {
+          MODEL: ["機種名", "機種", "Model", "MODEL"],
+          QRCODE: ["小張QRCODE", "QRCODE"],
+          CUBE_STICKER: ["Cube測試用貼紙", "Cube測試貼紙"],
+          NOTE: ["note", "Note", "備註"]
+        }
       }
     };
     window.CUSTOMERS = CUSTOMERS;
@@ -168,6 +227,8 @@
       <button type="button" id="tab-lunfei" class="preview-tab" data-customer="lunfei">倫飛</button>
       <button type="button" id="tab-bng" class="preview-tab" data-customer="bng">超恩</button>
       <button type="button" id="tab-chg" class="preview-tab" data-customer="chg">KOYA</button>
+      <button type="button" id="tab-hmg" class="preview-tab" data-customer="hmg">赫星</button>
+      <button type="button" id="tab-clg" class="preview-tab" data-customer="clg">Cubepilot</button>
     </div>
   </section>
 
@@ -259,6 +320,7 @@
         <input id="search-input-bng" type="text" placeholder="輸入 MO" disabled>
         <button id="btn-query-bng" disabled>解析工單</button>
         <button id="btn-export-bng" disabled>生成序號 & 匯出</button>
+        <button id="btn-print-bng" class="btn-secondary" disabled>列印收據明細</button>
       </div>
     </section>
     <section id="preview-panel-bng" class="card">
@@ -302,6 +364,90 @@
       <p>按「查看歷史」以顯示目前歷史資料。</p>
     </section>
   </section>
+
+  <section id="hmg-workspace" hidden>
+    <p>來源：使用者上傳 Excel（Sheet：Sheet1）</p>
+    <section class="card">
+      <h2 class="section-title">資料來源設定（赫星）</h2>
+      <div class="toolbar">
+        <button id="btn-load-hmg">上傳赫星 Excel</button>
+        <button id="btn-history-hmg" class="btn-secondary">查看歷史</button>
+      </div>
+      <p class="upload-file-hint">請上傳 "H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\組裝、包裝階序號編碼.xls"</p>
+      <input id="file-input-hmg" type="file" accept=".xlsx,.xls" hidden>
+      <div class="status-row">
+        <span id="loading-indicator-hmg" class="loading-indicator" aria-hidden="true"></span>
+        <p id="status-hmg">尚未上傳赫星 Excel 檔案。</p>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="section-title">查詢與操作（赫星）</h2>
+      <div class="toolbar">
+        <input id="search-input-hmg" type="text" placeholder="輸入 Model（可關鍵字）" disabled>
+        <button id="btn-query-hmg" disabled>查詢機種</button>
+        <button id="btn-export-hmg" disabled>匯出 HEX</button>
+      </div>
+      <div id="hmg-suggest-panel" class="clg-suggest-panel" hidden></div>
+    </section>
+    <section id="preview-panel-hmg" class="card">
+      <h2>赫星 預覽窗格</h2>
+      <p>請先上傳赫星 Excel（Sheet1），再輸入 Model 關鍵字查詢。</p>
+    </section>
+    <section id="history-panel-hmg" class="card" hidden>
+      <h2>歷史記憶</h2>
+      <p>按「查看歷史」以顯示目前歷史資料。</p>
+    </section>
+  </section>
+
+  <section id="clg-workspace" hidden>
+    <p>來源：使用者上傳 Excel（Sheet：Sheet1）</p>
+    <section class="card">
+      <h2 class="section-title">資料來源設定（Cubepilot）</h2>
+      <div class="toolbar">
+        <button id="btn-load-clg">上傳 Cubepilot Excel（選填）</button>
+        <button id="btn-history-clg" class="btn-secondary">查看歷史</button>
+      </div>
+      <p class="upload-file-hint">請上傳 "H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\PCB板階、測試階序號编码.xls"</p>
+      <input id="file-input-clg" type="file" accept=".xlsx,.xls" hidden>
+      <div class="status-row">
+        <span id="loading-indicator-clg" class="loading-indicator" aria-hidden="true"></span>
+        <p id="status-clg">尚未上傳 Cubepilot Excel（可直接使用序號生成設定）。</p>
+      </div>
+    </section>
+    <section class="card">
+      <h2 class="section-title">查詢與操作（Cubepilot）</h2>
+      <div class="toolbar">
+        <input id="search-input-clg" type="text" placeholder="輸入機種名（可關鍵字）" disabled>
+        <button id="btn-query-clg" disabled>查詢機種</button>
+        <button id="btn-export-clg" disabled>生成序號 & 匯出</button>
+      </div>
+      <div id="clg-suggest-panel" class="clg-suggest-panel" hidden></div>
+    </section>
+    <section class="card">
+      <h2 class="section-title">序號生成設定（Cubepilot）</h2>
+      <div class="toolbar clg-serial-toolbar">
+        <input id="clg-prefix-input" type="text" placeholder="前綴（可空白）">
+        <input id="clg-start-input" type="text" placeholder="起始流水號（必填）">
+        <input id="clg-suffix-input" type="text" placeholder="後綴（可空白）">
+        <select id="clg-base-select">
+          <option value="10">10</option>
+          <option value="16">16</option>
+          <option value="cycle_0_6">0–6 循環進位制</option>
+          <option value="cycle_1_6">1–6 循環進位制</option>
+        </select>
+        <input id="clg-count-input" type="number" min="1" step="1" value="1" placeholder="要生產幾個序號">
+      </div>
+    </section>
+    <section id="preview-panel-clg" class="card">
+      <h2>Cubepilot 預覽窗格</h2>
+      <p>可直接使用序號生成設定；若上傳 Excel（Sheet1）可搭配機種資料查詢。</p>
+    </section>
+    <section id="history-panel-clg" class="card" hidden>
+      <h2>歷史記憶</h2>
+      <p>按「查看歷史」以顯示目前歷史資料。</p>
+    </section>
+  </section>
+  <section id="bng-receipt-print-root" class="bng-receipt-print-root" hidden aria-hidden="true"></section>
 </main>
 <script type="module" src="./js/app.js"></script>
 </body>

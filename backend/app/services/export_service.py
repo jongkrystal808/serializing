@@ -1,5 +1,5 @@
 from io import BytesIO
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Tuple
 
 from openpyxl import Workbook
 
@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.errors import AppError
 from app.schemas.export import ExportRequest
 
-EXPORT_HEADERS: Dict[str, Dict[str, List[str]]] = {
+EXPORT_HEADERS: Dict[str, Dict[str, Any]] = {
     "yingbang": {
         "SN": ["SN", "Datecode", "PN"],
     },
@@ -22,6 +22,14 @@ EXPORT_HEADERS: Dict[str, Dict[str, List[str]]] = {
     "chg": {
         "SN": ["工單", "PN"],
         "BOX": ["PO", "PN", "full PN", "DDC PN", "DDC LOT", "QTY", "DATE"],
+    },
+    "hmg": {
+        "SN": ["Model", "PN", "EAN Code", "PCBA"],
+        "SN_SHEET_NAME": "HEX",
+    },
+    "clg": {
+        "SN": ["SN"],
+        "SN_SHEET_NAME": "MES",
     },
 }
 
@@ -43,7 +51,8 @@ class ExportService:
         workbook.remove(default_sheet)
 
         config = EXPORT_HEADERS[customer]
-        self._append_sn_sheet(workbook, config["SN"], payload.sn_rows)
+        sn_sheet_name = str(config.get("SN_SHEET_NAME", "SN")).strip() or "SN"
+        self._append_sn_sheet(workbook, sn_sheet_name, config["SN"], payload.sn_rows)
         if "box" in config:
             self._append_single_row_sheet(workbook, "box", config["box"], payload.box_row)
         if "BOX" in config:
@@ -61,8 +70,8 @@ class ExportService:
         )
 
     @staticmethod
-    def _append_sn_sheet(workbook: Workbook, headers: List[str], rows: List[Dict[str, str]]) -> None:
-        sheet = workbook.create_sheet("SN")
+    def _append_sn_sheet(workbook: Workbook, sheet_name: str, headers: List[str], rows: List[Dict[str, str]]) -> None:
+        sheet = workbook.create_sheet(sheet_name)
         sheet.append(headers)
         for row in rows:
             sheet.append([str(row.get(column, "")) for column in headers])

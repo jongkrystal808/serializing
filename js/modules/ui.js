@@ -1,6 +1,50 @@
 import { CONFIG } from "../config.js";
 import { escapeHtml } from "./utils.js";
 
+// 【用途】使用舊版 document.execCommand('copy') 作為剪貼簿 fallback（支援非 HTTPS 情境）
+function copyTextByExecCommand(value) {
+  const textarea = document.createElement("textarea");
+  textarea.value = String(value ?? "");
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.top = "0";
+  textarea.style.left = "0";
+  textarea.style.opacity = "0";
+  textarea.style.pointerEvents = "none";
+  document.body.appendChild(textarea);
+
+  let copied = false;
+  try {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    copied = document.execCommand("copy");
+  } finally {
+    textarea.remove();
+  }
+  return copied;
+}
+
+// 【用途】優先使用 Clipboard API，失敗時自動降級為 execCommand 複製
+async function copyTextToClipboard(value) {
+  const text = String(value ?? "");
+  const canUseClipboardApi = Boolean(window.isSecureContext && navigator?.clipboard?.writeText);
+
+  if (canUseClipboardApi) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      // Clipboard API 在權限被拒或瀏覽器限制時，改走舊版 fallback
+    }
+  }
+
+  const copied = copyTextByExecCommand(text);
+  if (!copied) {
+    throw new Error("Clipboard write failed.");
+  }
+}
+
 function renderPreviewItem(label, value, copyable) {
   const escapedLabel = escapeHtml(label);
   const escapedValue = escapeHtml(value);
@@ -75,31 +119,151 @@ function renderHistoryPane(workOrderHistory) {
   `;
 }
 
-function renderPreviewNoteSlot(customerKey) {
-  const key = String(customerKey ?? "").trim();
-  const profile = window.CUSTOMERS?.[key] || {};
-  const htmlNote = String(profile.previewNoteHtml ?? "").trim();
-  if (htmlNote) {
-    return `<div class="preview-note-slot">${htmlNote}</div>`;
-  }
-  const textNote = String(profile.previewNote ?? "").trim();
-  if (textNote) {
-    return `<div class="preview-note-slot">${escapeHtml(textNote)}</div>`;
-  }
-  return `<div class="preview-note-slot preview-note-placeholder">（可在 index.html 的 CUSTOMERS.${escapeHtml(key)}.previewNote 設定備註）</div>`;
+// 【用途】將自訂頁籤 id 正規化為可安全放入 data-tab 的字串
+function normalizeCustomTabId(rawId, index) {
+  const base = String(rawId ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const suffix = base || `tab-${index + 1}`;
+  return `custom-${suffix}`;
 }
 
-function renderPreviewTabsWithNote(customerKey, hasHistory) {
+// 【用途】由客戶設定解析自訂頁籤（支援標籤名稱與 HTML 內容）
+function getConfiguredPreviewTabs(customerKey) {
+  const key = String(customerKey ?? "").trim();
+  const profile = window.CUSTOMERS?.[key] || {};
+  const tabs = [];
+  const usedIds = new Set();
+
+  const fixedTabs = Array.isArray(profile.previewCustomTabs) ? profile.previewCustomTabs : [];
+  const runtimeTabs = Array.isArray(profile.extraPreviewTabs) ? profile.extraPreviewTabs : [];
+
+  fixedTabs.forEach((item, index) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+    const tabId = normalizeCustomTabId(item.id || item.key || item.tabId, index);
+    if (usedIds.has(tabId)) {
+      return;
+    }
+    const label = String(item.label || item.name || item.tabName || `自訂頁籤${index + 1}`).trim();
+    const html = String(item.html || item.contentHtml || "").trim();
+    const text = String(item.text || item.contentText || "").trim();
+    if (!label || (!html && !text)) {
+      return;
+    }
+    usedIds.add(tabId);
+    tabs.push({
+      tabId,
+      label,
+      html,
+      text,
+      removable: false
+    });
+  });
+
+  runtimeTabs.forEach((item, index) => {
+    if (!item || typeof item !== "object") {
+      return;
+    }
+    const tabId = normalizeCustomTabId(item.id || item.key || item.tabId, fixedTabs.length + index);
+    if (usedIds.has(tabId)) {
+      return;
+    }
+    const label = String(item.label || item.name || item.tabName || `自訂頁籤${index + 1}`).trim();
+    const html = String(item.html || item.contentHtml || "").trim();
+    const text = String(item.text || item.contentText || "").trim();
+    if (!label) {
+      return;
+    }
+    usedIds.add(tabId);
+    tabs.push({
+      tabId,
+      label,
+      html,
+      text,
+      itemId: String(item.id || item.key || item.tabId || "").trim(),
+      removable: true
+    });
+  });
+
+  const legacyHtml = String(profile.previewNoteHtml ?? "").trim();
+  const legacyText = String(profile.previewNote ?? "").trim();
+  const isPlaceholder = /可在\s*index\.html\s*的\s*CUSTOMERS\./.test(legacyText);
+  if (legacyHtml || (legacyText && !isPlaceholder)) {
+    const legacyTabId = normalizeCustomTabId("note", tabs.length);
+    if (!usedIds.has(legacyTabId)) {
+      usedIds.add(legacyTabId);
+      tabs.push({
+        tabId: legacyTabId,
+        label: String(profile.previewNoteTabLabel || "備註").trim() || "備註",
+        html: legacyHtml,
+        text: legacyText,
+        removable: false
+      });
+    }
+  }
+
+  return tabs;
+}
+
+// 【用途】渲染預覽區頁籤列（含預設頁籤 + 自訂頁籤）
+function renderPreviewTabs(customerKey, hasHistory, customTabs) {
+  const customTabButtons = (customTabs || [])
+    .map((tab) => `<button type="button" class="preview-tab preview-tab-custom" data-tab="${escapeHtml(tab.tabId)}">${escapeHtml(tab.label)}</button>`)
+    .join("");
   return `
     <div class="preview-tabs-row">
       <div class="preview-tabs">
         <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
         <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
         ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
+        ${customTabButtons}
       </div>
-      ${renderPreviewNoteSlot(customerKey)}
+      <button type="button" class="preview-tab-add" data-action="add-custom-tab" data-customer-key="${escapeHtml(customerKey)}">+ 新增頁籤</button>
     </div>
   `;
+}
+
+// 【用途】渲染自訂頁籤內容區（支援 HTML 或純文字）
+function renderCustomPreviewPanes(customerKey, customTabs) {
+  if (!Array.isArray(customTabs) || customTabs.length === 0) {
+    return "";
+  }
+  return customTabs
+    .map((tab) => {
+      const htmlContent = tab.html
+        ? tab.html
+        : (tab.text ? `<div class="preview-custom-text">${escapeHtml(tab.text).replace(/\n/g, "<br>")}</div>` : "");
+      return `
+        <div class="preview-pane preview-pane-custom" data-pane="${escapeHtml(tab.tabId)}">
+          ${tab.removable ? `<div class="preview-custom-actions">
+            <button
+              type="button"
+              class="btn-secondary preview-custom-remove-btn"
+              data-action="remove-custom-tab"
+              data-customer-key="${escapeHtml(customerKey)}"
+              data-tab-id="${escapeHtml(tab.tabId)}"
+              data-tab-item-id="${escapeHtml(tab.itemId || "")}"
+            >移除頁籤</button>
+          </div>` : ""}
+          ${tab.removable
+            ? `<div
+                class="preview-custom-editor"
+                contenteditable="true"
+                data-action="edit-custom-tab"
+                data-customer-key="${escapeHtml(customerKey)}"
+                data-tab-id="${escapeHtml(tab.tabId)}"
+                data-tab-item-id="${escapeHtml(tab.itemId || "")}"
+                data-placeholder="請在這裡編輯備註內容"
+              >${htmlContent}</div>`
+            : htmlContent}
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function renderPreviewGroup(title, items) {
@@ -183,6 +347,7 @@ export function renderSearchSuccess(ui, args) {
   const pn = row[resolveColumnKey(row, "PN") || CONFIG.COLUMNS.PN] || "";
   const qty = resolvedQty || row[resolveColumnKey(row, "QTY") || CONFIG.COLUMNS.QTY] || "";
   const hasHistory = Array.isArray(workOrderHistory) && workOrderHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs("yingbang");
 
   ui.previewPanel.innerHTML = `
     <h2>預覽窗格</h2>
@@ -191,7 +356,7 @@ export function renderSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(ddcPartNo)}</p>
       <p class="preview-subtitle">${escapeHtml(productName)}</p>
     </div>
-    ${renderPreviewTabsWithNote("yingbang", hasHistory)}
+    ${renderPreviewTabs("yingbang", hasHistory, customTabs)}
     <div class="preview-pane active" data-pane="preview">
       <div class="preview-grid">
         ${renderPreviewItem("SN（第一筆預覽）", previewSN, true)}
@@ -206,6 +371,7 @@ export function renderSearchSuccess(ui, args) {
       ${renderSheetContentPane(rowData)}
     </div>
     ${hasHistory ? `<div class="preview-pane" data-pane="history">${renderHistoryPane(workOrderHistory)}</div>` : ""}
+    ${renderCustomPreviewPanes("yingbang", customTabs)}
   `;
 }
 
@@ -217,7 +383,7 @@ export function bindPreviewTabsIn(rootElement) {
   if (!rootElement) {
     return;
   }
-  const tabs = rootElement.querySelectorAll(".preview-tab");
+  const tabs = rootElement.querySelectorAll(".preview-tab[data-tab]");
   const panes = rootElement.querySelectorAll(".preview-pane");
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
@@ -233,6 +399,42 @@ export function bindPreviewTabsIn(rootElement) {
   });
 }
 
+// 【用途】綁定預覽窗格的自訂頁籤操作事件（新增/移除/編輯）
+export function bindCustomTabActionsIn(rootElement, handlers = {}) {
+  if (!rootElement) {
+    return;
+  }
+  const addButton = rootElement.querySelector('[data-action="add-custom-tab"]');
+  if (addButton && typeof handlers.onAdd === "function") {
+    addButton.addEventListener("click", () => {
+      const customerKey = String(addButton.getAttribute("data-customer-key") ?? "").trim();
+      handlers.onAdd(customerKey);
+    });
+  }
+  const removeButtons = rootElement.querySelectorAll('[data-action="remove-custom-tab"]');
+  if (typeof handlers.onRemove === "function") {
+    removeButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const customerKey = String(button.getAttribute("data-customer-key") ?? "").trim();
+        const tabId = String(button.getAttribute("data-tab-id") ?? "").trim();
+        const tabItemId = String(button.getAttribute("data-tab-item-id") ?? "").trim();
+        handlers.onRemove(customerKey, tabId, tabItemId);
+      });
+    });
+  }
+  const editors = rootElement.querySelectorAll('[data-action="edit-custom-tab"]');
+  if (typeof handlers.onEdit === "function") {
+    editors.forEach((editor) => {
+      editor.addEventListener("blur", () => {
+        const customerKey = String(editor.getAttribute("data-customer-key") ?? "").trim();
+        const tabId = String(editor.getAttribute("data-tab-id") ?? "").trim();
+        const tabItemId = String(editor.getAttribute("data-tab-item-id") ?? "").trim();
+        handlers.onEdit(customerKey, tabId, tabItemId, editor.innerHTML);
+      });
+    });
+  }
+}
+
 export function bindSheetCopyCells(ui, onCopyError) {
   bindSheetCopyCellsIn(ui.previewPanel, onCopyError);
 }
@@ -246,7 +448,7 @@ export function bindSheetCopyCellsIn(rootElement, onCopyError) {
     cell.addEventListener("click", async () => {
       const value = cell.getAttribute("data-copy-value") || "";
       try {
-        await navigator.clipboard.writeText(value);
+        await copyTextToClipboard(value);
         cell.classList.add("copied");
         setTimeout(() => {
           cell.classList.remove("copied");
@@ -265,7 +467,7 @@ export function bindCopyButtons(ui, onCopyError) {
       const originalText = button.textContent;
       const copyValue = button.getAttribute("data-copy-value") || "";
       try {
-        await navigator.clipboard.writeText(copyValue);
+        await copyTextToClipboard(copyValue);
         button.textContent = "✓ 已複製";
         setTimeout(() => {
           button.textContent = originalText;
@@ -287,7 +489,7 @@ export function bindCopyButtonsIn(rootElement, onCopyError) {
       const originalText = button.textContent;
       const copyValue = button.getAttribute("data-copy-value") || "";
       try {
-        await navigator.clipboard.writeText(copyValue);
+        await copyTextToClipboard(copyValue);
         button.textContent = "✓ 已複製";
         setTimeout(() => {
           button.textContent = originalText;
@@ -410,6 +612,7 @@ export function renderLunfeiSearchSuccess(ui, args) {
   const pcba = row[resolveColumnKey(row, "PCBA") || CONFIG.COLUMNS.PCBA] || "";
   const qty = resolvedQty || row[resolveColumnKey(row, "QTY") || CONFIG.COLUMNS.QTY] || "";
   const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs("lunfei");
 
   ui.lunfeiPreviewPanel.innerHTML = `
     <h2>倫飛預覽窗格</h2>
@@ -417,7 +620,7 @@ export function renderLunfeiSearchSuccess(ui, args) {
     <div class="preview-headline">
       <p class="preview-title">Model：${escapeHtml(model)}</p>
     </div>
-    ${renderPreviewTabsWithNote("lunfei", hasHistory)}
+    ${renderPreviewTabs("lunfei", hasHistory, customTabs)}
     <div class="preview-pane active" data-pane="preview">
       <div class="preview-grid">
         ${renderPreviewItem("SN（第一筆預覽）", previewSN, true)}
@@ -437,6 +640,7 @@ export function renderLunfeiSearchSuccess(ui, args) {
         <button type="button" class="btn-secondary" id="btn-clear-history-lunfei">清空歷史序號</button>
       </div>
     </div>` : ""}
+    ${renderCustomPreviewPanes("lunfei", customTabs)}
   `;
 }
 
@@ -475,6 +679,7 @@ export function renderBngSearchSuccess(ui, args) {
   const fw = row[resolveColumnKey(row, "FW") || CONFIG.COLUMNS.FW] || "";
   const boxModel = formatBngModelForBox(model);
   const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs("bng");
   const snGroup = renderBngPreviewGroup("SN 分區", [
     renderPreviewItem("序號區間", snRange, true),
     renderPreviewItem("生產數量", qty, true)
@@ -507,7 +712,7 @@ export function renderBngSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(model)}</p>
       <p class="preview-subtitle">機種料號：${escapeHtml(partNo)}｜日期：${escapeHtml(date)}</p>
     </div>
-    ${renderPreviewTabsWithNote("bng", hasHistory)}
+    ${renderPreviewTabs("bng", hasHistory, customTabs)}
     <div class="preview-pane active" data-pane="preview">
       <div class="bng-preview-groups">
         ${snGroup}
@@ -526,6 +731,7 @@ export function renderBngSearchSuccess(ui, args) {
         <button type="button" class="btn-secondary" id="btn-clear-history-bng">清空歷史序號</button>
       </div>
     </div>` : ""}
+    ${renderCustomPreviewPanes("bng", customTabs)}
   `;
 }
 
@@ -558,6 +764,7 @@ export function renderChgSearchSuccess(ui, args) {
   const demand = row[resolveColumnKey(row, "DEMAND") || CONFIG.COLUMNS.DEMAND] || "";
   const tailQty = row[resolveColumnKey(row, "TAIL_QTY") || CONFIG.COLUMNS.TAIL_QTY] || "";
   const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs("chg");
 
   const labelGroup = renderPreviewGroup("Label 分區", [
     renderPreviewItem("PN", pn, true),
@@ -576,7 +783,7 @@ export function renderChgSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(model)}</p>
       <p class="preview-subtitle">工單：${escapeHtml(workOrder)}｜PO：${escapeHtml(po)}｜批量：${escapeHtml(batch)}</p>
     </div>
-    ${renderPreviewTabsWithNote("chg", hasHistory)}
+    ${renderPreviewTabs("chg", hasHistory, customTabs)}
     <div class="preview-pane active" data-pane="preview">
       ${labelGroup}
       ${boxLabelGroup}
@@ -590,5 +797,176 @@ export function renderChgSearchSuccess(ui, args) {
         <button type="button" class="btn-secondary" id="btn-clear-history-chg">清空歷史序號</button>
       </div>
     </div>` : ""}
+    ${renderCustomPreviewPanes("chg", customTabs)}
   `;
+}
+
+export function renderHmgSearchNotFound(ui, query) {
+  if (!ui.hmgPreviewPanel) {
+    return;
+  }
+  ui.hmgPreviewPanel.innerHTML = `
+    <h2>赫星 預覽窗格</h2>
+    <div class="error-box">查無對應機種，請確認 Model 關鍵字是否正確（${escapeHtml(query)}）</div>
+  `;
+}
+
+export function renderHmgSearchSuccess(ui, args) {
+  const {
+    row,
+    query,
+    matchCount,
+    resolveColumnKey,
+    rowData,
+    generationHistory
+  } = args;
+  const model = row[resolveColumnKey(row, "MODEL") || CONFIG.COLUMNS.MODEL] || "";
+  const pn = row[resolveColumnKey(row, "PN") || CONFIG.COLUMNS.PN] || "";
+  const ean = row[resolveColumnKey(row, "EAN") || CONFIG.COLUMNS.EAN] || "";
+  const pcba = row[resolveColumnKey(row, "PCBA") || CONFIG.COLUMNS.PCBA] || "";
+  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs("hmg");
+  const previewItems = [
+    { label: "Model", value: model, copyable: true },
+    { label: "PN", value: pn, copyable: true },
+    { label: "EAN Code", value: ean, copyable: true },
+    { label: "PCBA", value: pcba, copyable: true }
+  ].filter((item) => String(item.value ?? "").trim() !== "");
+  const previewGridHtml = previewItems.length > 0
+    ? previewItems.map((item) => renderPreviewItem(item.label, item.value, item.copyable)).join("")
+    : `<p class="preview-empty-note">目前可顯示欄位皆為空值。</p>`;
+
+  ui.hmgPreviewPanel.innerHTML = `
+    <h2>赫星 預覽窗格</h2>
+    <p>查詢 Model：${escapeHtml(query)}（命中 ${matchCount} 筆）</p>
+    <div class="preview-headline">
+      <p class="preview-title">${escapeHtml(model)}</p>
+    </div>
+    ${renderPreviewTabs("hmg", hasHistory, customTabs)}
+    <div class="preview-pane active" data-pane="preview">
+      <div class="preview-grid">
+        ${previewGridHtml}
+      </div>
+    </div>
+    <div class="preview-pane" data-pane="sheet">
+      ${renderSheetContentPane(rowData)}
+    </div>
+    ${hasHistory ? `<div class="preview-pane" data-pane="history">
+      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
+      <div class="history-actions">
+        <button type="button" class="btn-secondary" id="btn-clear-history-hmg">清空歷史序號</button>
+      </div>
+    </div>` : ""}
+    ${renderCustomPreviewPanes("hmg", customTabs)}
+  `;
+}
+
+export function renderClgSearchNotFound(ui, query) {
+  if (!ui.clgPreviewPanel) {
+    return;
+  }
+  ui.clgPreviewPanel.innerHTML = `
+    <h2>Cubepilot 預覽窗格</h2>
+    <div class="error-box">查無對應機種，請確認機種名是否正確（${escapeHtml(query)}）</div>
+  `;
+}
+
+export function renderClgSearchSuccess(ui, args) {
+  const {
+    row,
+    query,
+    matchCount,
+    resolveColumnKey,
+    rowData,
+    plannedSerialPreview,
+    generationHistory
+  } = args;
+  const model = row[resolveColumnKey(row, "MODEL") || CONFIG.COLUMNS.MODEL] || "";
+  const qrCode = row[resolveColumnKey(row, "QRCODE") || CONFIG.COLUMNS.QRCODE] || "";
+  const cubeSticker = row[resolveColumnKey(row, "CUBE_STICKER") || CONFIG.COLUMNS.CUBE_STICKER] || "";
+  const note = row[resolveColumnKey(row, "NOTE") || CONFIG.COLUMNS.NOTE] || "";
+  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs("clg");
+  const previewItems = [
+    { label: "機種名", value: model, copyable: true },
+    { label: "小張QRCODE", value: qrCode, copyable: true },
+    { label: "Cube測試用貼紙", value: cubeSticker, copyable: true },
+    { label: "note", value: note, copyable: true }
+  ].filter((item) => String(item.value ?? "").trim() !== "");
+  const previewGridHtml = previewItems.length > 0
+    ? previewItems.map((item) => renderPreviewItem(item.label, item.value, item.copyable)).join("")
+    : `<p class="preview-empty-note">目前可顯示欄位皆為空值。</p>`;
+  const serialPreviewHtml = renderClgPlannedSerialPreview(plannedSerialPreview);
+
+  ui.clgPreviewPanel.innerHTML = `
+    <h2>Cubepilot 預覽窗格</h2>
+    <p>查詢機種名：${escapeHtml(query)}（命中 ${matchCount} 筆）</p>
+    <div class="preview-headline">
+      <p class="preview-title">${escapeHtml(model)}</p>
+    </div>
+    ${renderPreviewTabs("clg", hasHistory, customTabs)}
+    <div class="preview-pane active" data-pane="preview">
+      <div class="preview-grid">
+        ${previewGridHtml}
+      </div>
+      <div id="clg-planned-preview-root">${serialPreviewHtml}</div>
+    </div>
+    <div class="preview-pane" data-pane="sheet">
+      ${renderSheetContentPane(rowData)}
+    </div>
+    ${hasHistory ? `<div class="preview-pane" data-pane="history">
+      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
+      <div class="history-actions">
+        <button type="button" class="btn-secondary" id="btn-clear-history-clg">清空歷史序號</button>
+      </div>
+    </div>` : ""}
+    ${renderCustomPreviewPanes("clg", customTabs)}
+  `;
+}
+
+function renderClgPlannedSerialPreview(plannedSerialPreview) {
+  const preview = plannedSerialPreview || {};
+  const error = String(preview.error ?? "").trim();
+  if (error) {
+    return `
+      <section class="clg-generated-preview">
+        <h3 class="section-title">預估生成序號預覽（生成前）</h3>
+        <div class="error-box">${escapeHtml(error)}</div>
+      </section>
+    `;
+  }
+  const total = Number(preview.total ?? 0);
+  const firstTen = Array.isArray(preview.firstTen) ? preview.firstTen : [];
+  const lastTen = Array.isArray(preview.lastTen) ? preview.lastTen : [];
+  if (total <= 0 || firstTen.length === 0 || lastTen.length === 0) {
+    return `
+      <section class="clg-generated-preview">
+        <h3 class="section-title">預估生成序號預覽（生成前）</h3>
+        <p class="preview-empty-note">請先輸入完整序號設定（起始流水號、數量等）。</p>
+      </section>
+    `;
+  }
+  return `
+    <section class="clg-generated-preview">
+      <h3 class="section-title">預估生成序號預覽（生成前，共 ${total} 筆）</h3>
+      <div class="clg-generated-grid">
+        <div class="clg-generated-group">
+          <p class="clg-generated-title">前 10 筆</p>
+          <ol class="clg-generated-list">${firstTen.map((sn) => `<li>${escapeHtml(sn)}</li>`).join("")}</ol>
+        </div>
+        <div class="clg-generated-group">
+          <p class="clg-generated-title">後 10 筆</p>
+          <ol class="clg-generated-list">${lastTen.map((sn) => `<li>${escapeHtml(sn)}</li>`).join("")}</ol>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
+export function updateClgPlannedSerialPreviewIn(ui, plannedSerialPreview) {
+  const root = ui?.clgPreviewPanel?.querySelector("#clg-planned-preview-root");
+  if (!root) {
+    return;
+  }
+  root.innerHTML = renderClgPlannedSerialPreview(plannedSerialPreview);
 }

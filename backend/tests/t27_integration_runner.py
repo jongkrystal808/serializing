@@ -4,10 +4,12 @@ import json
 import sys
 from dataclasses import dataclass
 from datetime import datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Callable, List
 
 from fastapi.testclient import TestClient
+from openpyxl import Workbook, load_workbook
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
@@ -272,6 +274,40 @@ def main() -> int:
 
         return "超恩：解析/筆數驗證/匯出/歷史查詢通過（key=MO）"
 
+    def case_bng_deleted_marker_cleanup() -> str:
+        bng_workbook = Workbook()
+        bng_sheet = bng_workbook.active
+        bng_sheet.title = "超恩出貨"
+        bng_sheet.append(["MO", "機種名稱", "新版BIOS(以此為主)", "IGN FW版本"])
+        bng_sheet.append(["BMO-DEL-1", "舊機種[已刪除]暫存[已刪除]CLG078-019M", "A[已刪除]B[已刪除]BIOS-NEW", "FW-KEEP"])
+        bng_buffer = BytesIO()
+        bng_workbook.save(bng_buffer)
+        bng_bytes = bng_buffer.getvalue()
+
+        parsed = parse_success_json(
+            client.post(
+                "/api/excel/parse",
+                data={
+                    "customer": "bng",
+                    "sheet_name": "超恩出貨",
+                    "parse_rules": "trim",
+                },
+                files={
+                    "file": (
+                        "bng-deleted-marker.xlsx",
+                        bng_bytes,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+        )
+        assert_true(parsed["rows_count"] == 1, "超恩刪除標記清理測試應有 1 筆資料")
+        row = parsed["rows"][0]
+        assert_true(row["機種名稱"] == "CLG078-019M", "超恩機種名稱應保留最後一個 [已刪除] 後內容")
+        assert_true(row["新版BIOS(以此為主)"] == "BIOS-NEW", "超恩 BIOS 應保留最後一個 [已刪除] 後內容")
+        assert_true("[已刪除]" not in "".join(str(value) for value in row.values()), "超恩預覽不應包含 [已刪除] 標記")
+        return "超恩：[已刪除] 欄位清理通過（保留最後標記後內容）"
+
     def case_chg_flow() -> str:
         parsed = parse_excel("chg", "KOYA出貨", "trim")
         assert_true(parsed["rows_count"] >= 1, "KOYA 解析結果 rows_count 應 >= 1")
@@ -320,6 +356,68 @@ def main() -> int:
 
         return "KOYA：Label/Box 匯出與歷史查詢通過"
 
+    def case_hmg_flow() -> str:
+        hmg_workbook = Workbook()
+        hmg_sheet = hmg_workbook.active
+        hmg_sheet.title = "Sheet1"
+        hmg_sheet.append(["Model", "PN", "EAN Code", "PCBA/Accessories      機種名"])
+        hmg_sheet.append(["HMG015-001E", "HX4-06001", "0094333516606", "Pixhawk2.1 Standard Set"])
+        hmg_buffer = BytesIO()
+        hmg_workbook.save(hmg_buffer)
+        hmg_bytes = hmg_buffer.getvalue()
+        parsed = parse_success_json(
+            client.post(
+                "/api/excel/parse",
+                data={
+                    "customer": "hmg",
+                    "sheet_name": "Sheet1",
+                    "parse_rules": "none",
+                },
+                files={
+                    "file": (
+                        "hmg-sheet1.xlsx",
+                        hmg_bytes,
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
+                },
+            )
+        )
+        assert_true(parsed["rows_count"] >= 1, "赫星解析結果 rows_count 應 >= 1")
+
+        parse_success_json(
+            client.post(
+                "/api/history/upsert",
+                json={
+                    "customer": "hmg",
+                    "key": "HMG015-001E",
+                    "increment": 1,
+                    "record": "2026-03-18-HMG015-001E",
+                },
+            )
+        )
+
+        export_response = client.post(
+            "/api/export",
+            json={
+                "customer": "hmg",
+                "sn_rows": [
+                    {"Model": "HMG015-001E", "PN": "HX4-06001", "EAN Code": "0094333516606", "PCBA": "Pixhawk2.1"},
+                ],
+                "file_name": "20260318-HMG015-001E.xls",
+            },
+        )
+        assert_true(export_response.status_code == 200, "赫星匯出應成功")
+        hmg_workbook = load_workbook(filename=BytesIO(export_response.content), data_only=True)
+        assert_true("HEX" in hmg_workbook.sheetnames, "赫星匯出 sheet 名稱應為 HEX")
+        assert_true(str(hmg_workbook["HEX"]["A2"].value or "") == "HMG015-001E", "赫星 HEX 內容不符預期")
+
+        history_data = parse_success_json(client.get("/api/history/hmg"))
+        matched = next((item for item in history_data["entries"] if item["key"] == "HMG015-001E"), None)
+        assert_true(bool(matched), "赫星歷史缺少 HMG015-001E")
+        assert_true(int(matched["last_serial"]) == 1, "赫星歷史流水號應為 1")
+
+        return "赫星：解析/HEX 匯出/歷史查詢通過（key=Model）"
+
     def case_failure_scenarios() -> str:
         response_sheet_not_found = client.post(
             "/api/excel/parse",
@@ -358,14 +456,42 @@ def main() -> int:
         )
         parse_error_json(response_invalid_yingbang, expected_status=400, expected_code="MISSING_PURCHASE_ORDER")
 
-        return "失敗情境：sheet 不存在 / 筆數不符 / customer 非法 / 缺 purchase_order 全部正確攔截"
+        response_invalid_excel = client.post(
+            "/api/excel/parse",
+            data={"customer": "yingbang", "sheet_name": "營邦出貨", "parse_rules": "arrow"},
+            files={
+                "file": (
+                    "invalid.xlsx",
+                    b"not-a-valid-zip-content",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            },
+        )
+        parse_error_json(response_invalid_excel, expected_status=400, expected_code="INVALID_EXCEL_FILE")
+
+        response_clg_export = client.post(
+            "/api/export",
+            json={
+                "customer": "clg",
+                "sn_rows": [{"SN": "CP0001"}],
+                "file_name": "Cubepilot-SN.xls",
+            },
+        )
+        assert_true(response_clg_export.status_code == 200, "Cubepilot 匯出應成功")
+        clg_workbook = load_workbook(filename=BytesIO(response_clg_export.content), data_only=True)
+        assert_true("MES" in clg_workbook.sheetnames, "Cubepilot 匯出 sheet 名稱應為 MES")
+        assert_true(str(clg_workbook["MES"]["A2"].value or "") == "CP0001", "Cubepilot MES 內容不符預期")
+
+        return "失敗情境：sheet 不存在 / 筆數不符 / customer 非法 / 缺 purchase_order / 非法 Excel 檔案攔截，且 clg 匯出為 MES"
 
     results: List[CaseResult] = []
     run_case("T27-01", "營邦完整流程（解析/生成/匯出/歷史）", case_yingbang_flow, results)
     run_case("T27-02", "倫飛完整流程（含週重置）", case_lunfei_flow_with_week_reset, results)
     run_case("T27-03", "超恩完整流程（區間展開與筆數驗證）", case_bng_flow_with_count_validation, results)
+    run_case("T27-07", "超恩 [已刪除] 清理", case_bng_deleted_marker_cleanup, results)
     run_case("T27-04", "KOYA 完整流程（Label/Box 匯出）", case_chg_flow, results)
-    run_case("T27-05", "失敗情境測試", case_failure_scenarios, results)
+    run_case("T27-05", "赫星完整流程（HEX 匯出）", case_hmg_flow, results)
+    run_case("T27-06", "失敗情境測試", case_failure_scenarios, results)
 
     passed_count = len([item for item in results if item.passed])
     failed_count = len(results) - passed_count

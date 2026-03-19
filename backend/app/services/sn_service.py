@@ -28,7 +28,7 @@ class SnService:
                 qty=qty,
                 week_key=payload.week_key,
             )
-        elif customer in {"bng", "chg"}:
+        elif customer in {"bng", "chg", "hmg", "clg"}:
             sn_list, previous, current = self._accept_external_serials(
                 customer=customer,
                 key=key,

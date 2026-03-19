@@ -7,7 +7,7 @@ class Settings:
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
     db_path: str = "backend/data/sn_generator.db"
-    allowed_customers: tuple[str, ...] = ("yingbang", "lunfei", "bng", "chg")
+    allowed_customers: tuple[str, ...] = ("yingbang", "lunfei", "bng", "chg", "hmg", "clg")
 
 
 settings = Settings()

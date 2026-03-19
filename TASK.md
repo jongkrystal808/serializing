@@ -1,8 +1,8 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.1
-**Last Updated:** 2026-03-13
+**Version:** 0.3.13
+**Last Updated:** 2026-03-18
 
 ---
 
@@ -41,6 +41,50 @@
 ---
 
 ## ✅ Done
+
+### ✅ T42 — 新增赫星（hmg）客戶模組（完成：2026-03-18）
+**Module:** HMG / Frontend / Backend
+**Notes:** 已新增 `hmg` 客戶頁籤與獨立上傳流程（`Sheet1`）；查詢改為沿用 Cubepilot 提示清單體驗，並以 Model 前六碼 `contains` 比對。匯出採單 sheet `HEX`（`Model/PN/EAN Code/PCBA`），檔名格式為 `[yyyymmdd]-[Model].xls`。SN 生成流程維持「不輸出 SN 欄」，但歷史主鍵改為 `Model`（`sn_history` + `generation_history`），且規則僅作用於 `hmg` 不影響其他客戶。後端已同步加入 `hmg` allowlist、Excel 欄位 alias 與匯出模板。
+
+### ✅ T41 — Cubepilot 無 Excel 直出模式（完成：2026-03-17）
+**Module:** Cubepilot / Frontend
+**Notes:** Cubepilot 現在可在未上傳 Excel、未查詢機種的情況下直接使用序號生成設定並匯出。生成按鈕啟用條件改為「序號設定有效」而非「已查詢機種」。未上傳 Excel 時仍可顯示生成前預覽（前/後 10 筆），匯出流程會以手動模式執行。
+
+### ✅ T40 — Cubepilot 新增「1–6 循環進位制」（完成：2026-03-17）
+**Module:** Cubepilot / Frontend Serial Rule
+**Notes:** Cubepilot 進制選單已新增 `1–6 循環進位制`。序號規則採分段進位：每段 `x1~x6`，遇 `x6` 後跳至下一段 `x1`（如 `00016 -> 00021`）。新規則已同步套用於「生成前預覽（前 10 / 後 10）」與「生成匯出」流程，並補齊起始流水號格式驗證（僅數字且個位數必須 1~6）。
+
+### ✅ T39 — Cubepilot 新增「0–6 循環進位制」（完成：2026-03-17）
+**Module:** Cubepilot / Frontend Serial Rule
+**Notes:** Cubepilot 進制選單已新增 `0–6 循環進位制`。序號規則採分段進位：每段 `x0~x6`，遇 `x6` 後跳至下一段 `x0`（如 `00016 -> 00020`）。新規則已同步套用於「生成前預覽（前 10 / 後 10）」與「生成匯出」流程，並補齊起始流水號格式驗證（僅數字且個位數必須 0~6）。
+
+### ✅ T38 — Cubepilot 序號預覽時機調整（完成：2026-03-17）
+**Module:** Cubepilot / Frontend Preview
+**Notes:** 已將 Cubepilot 的「前 10 筆 / 後 10 筆」改為生成前即時預覽。使用者在查詢機種後，只要調整前綴/起始流水號/後綴/進制/數量，預覽區段會立即刷新。若輸入不完整或格式錯誤，預覽區會顯示對應提示訊息。
+
+### ✅ T37 — Cubepilot 生成後序號區段預覽（完成：2026-03-17）
+**Module:** Cubepilot / Frontend Preview
+**Notes:** Cubepilot 在生成並匯出後，預覽窗格會顯示最近一次生成結果的「前 10 筆」與「後 10 筆」序號清單；若總筆數不足 10，則依實際筆數顯示。新增顯示條件為「目前查詢機種 = 最近一次生成機種」，避免切換機種時顯示錯誤結果。
+
+### ✅ T36 — Cubepilot UX/匯出熱修（完成：2026-03-17）
+**Module:** Cubepilot / Frontend / Backend Export
+**Notes:** `clg` 匯出 sheet 名稱已改為 `MES`。Cubepilot 序號設定區欄位順序調整為前綴/起始流水號/後綴/進制/數量（數量移到最後）。預覽窗格改為空值欄位自動隱藏。查詢機種改為關鍵字提示清單並可點選，移除 `prompt` 強制輸入序號的流程。另補上整合測試驗證 `clg` 匯出 sheet 為 `MES`。
+
+### ✅ T35 — Excel 解析原生支援 `.xls`（完成：2026-03-17）
+**Module:** Backend / ExcelParserService
+**Notes:** 後端 `ExcelService` 新增雙格式讀取流程，會依檔案內容與副檔名自動嘗試 `.xlsx(openpyxl)` 與 `.xls(xlrd)`。`/api/excel/parse` 現在可直接解析 `.xls`；不可解析時統一回傳 `INVALID_EXCEL_FILE`（400，訊息含 `.xls/.xlsx`）。另新增 `xlrd==2.0.1` 依賴，並完成本地 `.xls` 實檔 API 驗證（`sheet=SN` 解析成功）。
+
+### ✅ T34 — 新增 Cubepilot 客戶模組（完成：2026-03-17）
+**Module:** Cubepilot / Frontend / Backend
+**Notes:** 已新增 `clg`（Cubepilot）客戶：讀取 `Sheet1` 並以 `機種名` 做 `contains` 查詢（忽略大小寫），多筆命中可由使用者選擇單筆。新增手動序號規則（前綴/起始流水號/數量/後綴/10或16進制）並串接 `/api/sn/generate`（`provided_serials`）。匯出採單 sheet（`SN`）且檔名由使用者輸入。歷史 key 以機種名管理，支援歷史面板查看與單筆重置。`clg` 改為獨立上傳解析，不再與營邦/倫飛/超恩/KOYA 共用同一份 Excel。後端已同步加入 `clg` allowlist、Excel 欄位 alias、SN 分流與匯出模板。
+
+### ✅ T33 — 預覽窗格改為可新增/編輯的自訂附加頁籤（完成：2026-03-16）
+**Module:** 全客戶 / UI / Preview Tabs
+**Notes:** 移除原本頁籤列右側備註區（綠框）；改為頁籤列右側顯示 `+ 新增頁籤`，可輸入頁籤名稱後建立自訂頁籤。自訂頁籤內容改為在該頁籤內容區直接編輯（`contenteditable`），失焦即自動儲存；並支援單頁籤移除。新增內容儲存於 localStorage（`sn_preview_custom_tabs`），重整後可保留；固定設定頁籤（`previewCustomTabs`）與動態新增頁籤可同時存在，樣式與預設三頁籤區隔。
+
+### ✅ T32 — 超恩收據明細套印列印（完成：2026-03-16）
+**Module:** 超恩 / UI / Print Layout
+**Notes:** 新增超恩「列印收據明細」按鈕與列印版型；欄位對應為 `DDC Model<-Model`、`MO<-MO`、`Work Order Number<-工單`、`Model<-機種名稱(去除 " 1." 起)`、`Number of MACs<-MAC數量`、`Part Number<-機種料號`、`MAC range<-MAC Address`、`Quantity<-生產數量`、`Remark<-機種名稱中 " 1." 起內容`。列印尺寸調整為約 A4 直向高度的 1/5，並套用淺灰標題底色。
 
 ### ✅ T31 — 四客戶預覽窗格新增可配置備註槽（完成：2026-03-13）
 **Module:** UI / Customer Config
@@ -174,12 +218,21 @@
 | Phase 4（新增 KOYA） | 1 | 1 | 0 | 0 |
 | Phase 5（全客戶規則統一） | 1 | 1 | 0 | 0 |
 | Phase 6（Nginx + FastAPI） | 9 | 8 | 0 | 1 |
-| Phase 7（Hotfix） | 3 | 3 | 0 | 0 |
-| **Total** | **30** | **29** | **0** | **1** |
+| Phase 7（Hotfix） | 5 | 5 | 0 | 0 |
+| Phase 8（新增 Cubepilot） | 1 | 1 | 0 | 0 |
+| Phase 9（Hotfix：Excel `.xls` 支援） | 1 | 1 | 0 | 0 |
+| Phase 10（Hotfix：Cubepilot UX/匯出） | 1 | 1 | 0 | 0 |
+| Phase 11（Hotfix：Cubepilot 序號區段預覽） | 1 | 1 | 0 | 0 |
+| Phase 12（Hotfix：Cubepilot 預覽時機） | 1 | 1 | 0 | 0 |
+| Phase 13（Hotfix：Cubepilot 新進制） | 1 | 1 | 0 | 0 |
+| Phase 14（Hotfix：Cubepilot 1–6 新進制） | 1 | 1 | 0 | 0 |
+| Phase 15（Hotfix：Cubepilot 無 Excel 直出） | 1 | 1 | 0 | 0 |
+| Phase 16（新增赫星 HMG） | 1 | 1 | 0 | 0 |
+| **Total** | **41** | **40** | **0** | **1** |
 
 ---
 
-## 🗓️ Suggested Build Order（Phase 6）
+## 🗓️ Suggested Build Order（Phase 6 + Phase 16）
 
 ```
 T27 全流程整合測試
@@ -196,8 +249,8 @@ T27 全流程整合測試
 3. 相關現況程式碼（前端或 backend）
 
 每個 Task 建議**單獨交給 AI 執行**，避免一次處理多個模組。
-目前請從 **T28** 開始執行，完成並驗證後再進到下一個 Task。
+優先執行 `🔄 In Progress` 任務；若無進行中任務，再依 `⬜ Todo` 由上而下處理。
 
 ---
 
-*Last updated: 2026-03-13*
+*Last updated: 2026-03-18*

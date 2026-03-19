@@ -1,13 +1,19 @@
 from io import BytesIO
+from pathlib import Path
 from typing import Dict, List
+from zipfile import BadZipFile
 
 from openpyxl import load_workbook
+from openpyxl.utils.exceptions import InvalidFileException
 
 from app.core.config import settings
 from app.core.errors import AppError
 from app.schemas.excel import ParseExcelRequest, ParseExcelResponse
 
 ARROW_PATTERN = ("->", "→", ">")
+OLE2_SIGNATURE = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
+ZIP_SIGNATURE = b"PK\x03\x04"
+DELETED_MARKER = "[已刪除]"
 
 COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "yingbang": {
@@ -54,6 +60,18 @@ COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
         "TAIL_QTY": ["尾數數量"],
         "FULL_PN": ["full PN", "FULL PN", "Full PN"],
     },
+    "hmg": {
+        "MODEL": ["Model", "MODEL", "model"],
+        "PN": ["PN", "P/N", "PK", "料號"],
+        "EAN": ["EAN Code", "EAN", "條碼"],
+        "PCBA": ["PCBA/Accessories      機種名", "PCBA/Accessories 機種名", "PCB/AAccessories", "PCBA"],
+    },
+    "clg": {
+        "MODEL": ["機種名", "機種", "Model", "MODEL"],
+        "QRCODE": ["小張QRCODE", "QRCODE"],
+        "CUBE_STICKER": ["Cube測試用貼紙", "Cube測試貼紙"],
+        "NOTE": ["note", "Note", "備註"],
+    },
 }
 
 
@@ -69,34 +87,137 @@ class ExcelService:
         if not file_bytes:
             raise AppError("上傳檔案內容為空", code="EMPTY_FILE")
 
-        workbook = load_workbook(
-            filename=BytesIO(file_bytes),
-            data_only=True,
-            read_only=True,
-        )
-        if payload.sheet_name not in workbook.sheetnames:
+        workbook_type, workbook = self._load_workbook(payload.file_name, file_bytes)
+        try:
+            if customer == "hmg":
+                parsed_rows, resolved_columns = self._parse_hmg_columnar_rows(
+                    workbook_type=workbook_type,
+                    workbook=workbook,
+                    sheet_name=payload.sheet_name,
+                    parse_rules=payload.parse_rules,
+                )
+                return ParseExcelResponse(
+                    customer=customer,
+                    sheet_name=payload.sheet_name,
+                    file_name=payload.file_name,
+                    rows_count=len(parsed_rows),
+                    rows=parsed_rows,
+                    resolved_columns=resolved_columns,
+                )
+
+            sheet_names = self._get_sheet_names(workbook_type, workbook)
+            if payload.sheet_name not in sheet_names:
+                raise AppError(
+                    f"找不到工作表：{payload.sheet_name}",
+                    code="SHEET_NOT_FOUND",
+                    details={"available_sheets": sheet_names},
+                )
+
+            rows_iter = self._iter_rows(workbook_type, workbook, payload.sheet_name)
+            headers = self._read_headers(rows_iter)
+            if not headers:
+                raise AppError("Excel 表頭為空，無法解析", code="EMPTY_HEADER")
+
+            parsed_rows = self._read_rows(rows_iter, headers, payload.parse_rules)
+            if customer == "bng":
+                parsed_rows = self._sanitize_bng_rows(parsed_rows)
+            resolved_columns = self._resolve_columns(customer, headers)
+            return ParseExcelResponse(
+                customer=customer,
+                sheet_name=payload.sheet_name,
+                file_name=payload.file_name,
+                rows_count=len(parsed_rows),
+                rows=parsed_rows,
+                resolved_columns=resolved_columns,
+            )
+        finally:
+            self._close_workbook(workbook_type, workbook)
+
+    @staticmethod
+    def _resolve_reader_order(file_name: str, file_bytes: bytes) -> List[str]:
+        extension = Path(str(file_name or "")).suffix.lower()
+        looks_like_xls = extension == ".xls" or file_bytes.startswith(OLE2_SIGNATURE)
+        looks_like_xlsx = extension in {".xlsx", ".xlsm", ".xltx", ".xltm"} or file_bytes.startswith(ZIP_SIGNATURE)
+        if looks_like_xls and not looks_like_xlsx:
+            return ["xls", "xlsx"]
+        return ["xlsx", "xls"]
+
+    def _load_workbook(self, file_name: str, file_bytes: bytes):
+        errors = {}
+        xls_reader_missing = False
+        for reader in self._resolve_reader_order(file_name, file_bytes):
+            if reader == "xlsx":
+                try:
+                    return "xlsx", self._load_xlsx_workbook(file_bytes)
+                except (BadZipFile, InvalidFileException, OSError, ValueError) as error:
+                    errors["xlsx"] = str(error)
+                    continue
+            try:
+                return "xls", self._load_xls_workbook(file_bytes)
+            except ImportError:
+                xls_reader_missing = True
+                errors["xls"] = "xlrd not installed"
+            except Exception as error:  # noqa: BLE001
+                errors["xls"] = str(error)
+
+        if xls_reader_missing:
             raise AppError(
-                f"找不到工作表：{payload.sheet_name}",
-                code="SHEET_NOT_FOUND",
-                details={"available_sheets": workbook.sheetnames},
+                "伺服器尚未安裝 .xls 解析元件（xlrd），請聯繫管理員安裝後重試。",
+                code="XLS_SUPPORT_NOT_INSTALLED",
+                status_code=500,
+                details={"required_package": "xlrd"},
             )
 
-        sheet = workbook[payload.sheet_name]
-        rows_iter = sheet.iter_rows(values_only=True)
-        headers = self._read_headers(rows_iter)
-        if not headers:
-            raise AppError("Excel 表頭為空，無法解析", code="EMPTY_HEADER")
-
-        parsed_rows = self._read_rows(rows_iter, headers, payload.parse_rules)
-        resolved_columns = self._resolve_columns(customer, headers)
-        return ParseExcelResponse(
-            customer=customer,
-            sheet_name=payload.sheet_name,
-            file_name=payload.file_name,
-            rows_count=len(parsed_rows),
-            rows=parsed_rows,
-            resolved_columns=resolved_columns,
+        raise AppError(
+            "Excel 檔案格式無法解析，請確認為有效的 .xls 或 .xlsx 檔案後重試。",
+            code="INVALID_EXCEL_FILE",
+            details={"reasons": errors},
         )
+
+    @staticmethod
+    def _load_xlsx_workbook(file_bytes: bytes):
+        try:
+            return load_workbook(
+                filename=BytesIO(file_bytes),
+                data_only=True,
+                read_only=True,
+            )
+        except (BadZipFile, InvalidFileException, OSError, ValueError):
+            raise
+
+    @staticmethod
+    def _load_xls_workbook(file_bytes: bytes):
+        import xlrd
+
+        return xlrd.open_workbook(file_contents=file_bytes, on_demand=True)
+
+    @staticmethod
+    def _get_sheet_names(workbook_type: str, workbook) -> List[str]:
+        if workbook_type == "xlsx":
+            return list(workbook.sheetnames)
+        return list(workbook.sheet_names())
+
+    @staticmethod
+    def _iter_rows(workbook_type: str, workbook, sheet_name: str):
+        if workbook_type == "xlsx":
+            sheet = workbook[sheet_name]
+            return sheet.iter_rows(values_only=True)
+
+        sheet = workbook.sheet_by_name(sheet_name)
+
+        def iter_xls_rows():
+            for row_index in range(sheet.nrows):
+                yield [sheet.cell_value(row_index, col_index) for col_index in range(sheet.ncols)]
+
+        return iter_xls_rows()
+
+    @staticmethod
+    def _close_workbook(workbook_type: str, workbook) -> None:
+        if workbook_type == "xlsx":
+            workbook.close()
+            return
+        if hasattr(workbook, "release_resources"):
+            workbook.release_resources()
 
     @staticmethod
     def _read_headers(rows_iter) -> List[str]:
@@ -146,6 +267,22 @@ class ExcelService:
                     value = parts[-1]
         return value
 
+    def _sanitize_bng_rows(self, rows: List[Dict[str, str]]) -> List[Dict[str, str]]:
+        sanitized_rows: List[Dict[str, str]] = []
+        for row in rows:
+            cleaned = {header: self._strip_deleted_prefix(value) for header, value in row.items()}
+            if any(cleaned.values()):
+                sanitized_rows.append(cleaned)
+        return sanitized_rows
+
+    @staticmethod
+    def _strip_deleted_prefix(text: str) -> str:
+        value = str(text or "").strip()
+        marker_index = value.rfind(DELETED_MARKER)
+        if marker_index == -1:
+            return value
+        return value[marker_index + len(DELETED_MARKER) :].strip()
+
     def _resolve_columns(self, customer: str, headers: List[str]) -> Dict[str, str]:
         aliases = COLUMN_ALIASES.get(customer, {})
         resolved: Dict[str, str] = {}
@@ -167,6 +304,147 @@ class ExcelService:
     @staticmethod
     def _normalize(text: str) -> str:
         return str(text or "").strip().replace(" ", "").lower()
+
+    def _parse_hmg_columnar_rows(
+        self,
+        workbook_type: str,
+        workbook,
+        sheet_name: str,
+        parse_rules: List[str],
+    ) -> tuple[List[Dict[str, str]], Dict[str, str]]:
+        sheet_names = self._get_sheet_names(workbook_type, workbook)
+        if sheet_name not in sheet_names:
+            raise AppError(
+                f"找不到工作表：{sheet_name}",
+                code="SHEET_NOT_FOUND",
+                details={"available_sheets": sheet_names},
+            )
+
+        matrix = self._read_sheet_matrix(workbook_type, workbook, sheet_name)
+        if not matrix:
+            raise AppError("Excel 內容為空，無法解析赫星資料", code="EMPTY_HMG_SHEET")
+
+        model_rows: List[int] = []
+        pn_rows: List[int] = []
+        ean_rows: List[int] = []
+        pcba_rows: List[int] = []
+
+        for row_index, row in enumerate(matrix):
+            label = self._normalize_hmg_label(row[0] if row else "")
+            if not label:
+                continue
+            if label in {"model"}:
+                model_rows.append(row_index)
+            if label in {"pn", "pk", "p/n"}:
+                pn_rows.append(row_index)
+            if label in {"eancode", "ean"}:
+                ean_rows.append(row_index)
+            if label in {
+                "pcba/accessories機種名",
+                "pcba/accessories",
+                "pcbaaccessories機種名",
+                "pcbaaccessories",
+                "pcb/aaccessories",
+                "pcba",
+            }:
+                pcba_rows.append(row_index)
+
+        if not model_rows:
+            raise AppError(
+                "赫星解析失敗：找不到 Model 標籤列",
+                code="HMG_LAYOUT_INVALID",
+            )
+
+        max_cols = max(len(row) for row in matrix)
+        parsed_rows: List[Dict[str, str]] = []
+
+        for col in range(1, max_cols):
+            model_values = self._collect_hmg_values(matrix, model_rows, col, parse_rules)
+            if not model_values:
+                continue
+
+            pn_value = self._collect_hmg_first_value(matrix, pn_rows, col, parse_rules)
+            ean_value = self._collect_hmg_first_value(matrix, ean_rows, col, parse_rules)
+            pcba_value = self._collect_hmg_first_value(matrix, pcba_rows, col, parse_rules)
+
+            for model_value in model_values:
+                parsed_rows.append(
+                    {
+                        "Model": model_value,
+                        "PN": pn_value,
+                        "EAN Code": ean_value,
+                        "PCBA/Accessories      機種名": pcba_value,
+                    }
+                )
+
+        if not parsed_rows:
+            raise AppError(
+                "赫星解析失敗：未找到可用的 Model 資料",
+                code="HMG_LAYOUT_INVALID",
+            )
+
+        resolved_columns = {
+            "MODEL": "Model",
+            "PN": "PN",
+            "EAN": "EAN Code",
+            "PCBA": "PCBA/Accessories      機種名",
+        }
+        return parsed_rows, resolved_columns
+
+    @staticmethod
+    def _normalize_hmg_label(value: str) -> str:
+        return str(value or "").strip().replace(" ", "").replace("\n", "").lower()
+
+    def _read_sheet_matrix(self, workbook_type: str, workbook, sheet_name: str) -> List[List[str]]:
+        matrix: List[List[str]] = []
+        rows_iter = self._iter_rows(workbook_type, workbook, sheet_name)
+        max_cols = 0
+        for row in rows_iter:
+            values = [str(cell or "").strip() for cell in row]
+            matrix.append(values)
+            if len(values) > max_cols:
+                max_cols = len(values)
+        if max_cols == 0:
+            return []
+        return [row + [""] * (max_cols - len(row)) for row in matrix]
+
+    def _collect_hmg_values(
+        self,
+        matrix: List[List[str]],
+        row_indexes: List[int],
+        col: int,
+        parse_rules: List[str],
+    ) -> List[str]:
+        values: List[str] = []
+        seen = set()
+        for row_index in row_indexes:
+            if row_index < 0 or row_index >= len(matrix):
+                continue
+            raw = matrix[row_index][col] if col < len(matrix[row_index]) else ""
+            value = self._apply_parse_rules(raw, parse_rules)
+            if not value:
+                continue
+            if value in seen:
+                continue
+            seen.add(value)
+            values.append(value)
+        return values
+
+    def _collect_hmg_first_value(
+        self,
+        matrix: List[List[str]],
+        row_indexes: List[int],
+        col: int,
+        parse_rules: List[str],
+    ) -> str:
+        for row_index in row_indexes:
+            if row_index < 0 or row_index >= len(matrix):
+                continue
+            raw = matrix[row_index][col] if col < len(matrix[row_index]) else ""
+            value = self._apply_parse_rules(raw, parse_rules)
+            if value:
+                return value
+        return ""
 
 
 excel_service = ExcelService()
