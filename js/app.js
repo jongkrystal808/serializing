@@ -16,6 +16,7 @@ import {
 } from "./modules/excel.js";
 import {
   parseExcelByApi,
+  loadDefaultExcelByApi,
   generateSnByApi,
   getHistoryByApi,
   upsertHistoryByApi,
@@ -2990,6 +2991,54 @@ function initEvents() {
   document.addEventListener("click", onUsageHelpClick);
 }
 
+// 【用途】頁面載入時依後端設定的固定路徑自動載入 Excel，不需使用者手動上傳
+async function autoRestoreExcelData() {
+  const customers = ["yingbang", "lunfei", "bng", "chg", "hmg", "clg"];
+  const results = await Promise.allSettled(
+    customers.map((key) => loadDefaultExcelByApi(key))
+  );
+
+  const statusMap = {
+    yingbang: { state: "yingbangRowData", setSearch: true },
+    lunfei:   { state: "lunfeiRowData",   input: "lunfeiSearchInput", btn: "lunfeiQueryBtn" },
+    bng:      { state: "bngRowData",      input: "bngSearchInput",    btn: "bngQueryBtn" },
+    chg:      { state: "chgRowData",      input: "chgSearchInput",    btn: "chgQueryBtn" },
+    hmg:      { state: "hmgRowData",      input: "hmgSearchInput",    btn: "hmgQueryBtn" },
+    clg:      { state: "clgRowData",      input: "clgSearchInput",    btn: "clgQueryBtn" },
+  };
+
+  const restored = [];
+  const failed = [];
+
+  customers.forEach((key, index) => {
+    const outcome = results[index];
+    const cfg = statusMap[key];
+    if (outcome.status === "fulfilled") {
+      const rows = outcome.value?.rows;
+      if (Array.isArray(rows) && rows.length > 0) {
+        state[cfg.state] = rows;
+        restored.push(`${key} ${rows.length} 筆`);
+      }
+    } else {
+      failed.push(key);
+    }
+  });
+
+  // 更新 UI 啟用狀態
+  setSearchEnabled(state.yingbangRowData.length > 0);
+  ["lunfei", "bng", "chg", "hmg", "clg"].forEach((key) => {
+    const cfg = statusMap[key];
+    if (cfg.input) ui[cfg.input].disabled = state[cfg.state].length === 0;
+    if (cfg.btn)   ui[cfg.btn].disabled   = state[cfg.state].length === 0;
+  });
+
+  if (restored.length > 0) {
+    updateStatus(ui, `已自動載入 Excel：${restored.join("、")}`);
+  } else {
+    updateStatus(ui, "自動載入失敗，請手動上傳 Excel。", true);
+  }
+}
+
 async function main() {
   updateStatus(ui, "骨架初始化完成。");
   hydrateEditableCustomerCustomTabs();
@@ -2998,6 +3047,7 @@ async function main() {
   initEvents();
   setSearchEnabled(false);
   setExportEnabled(false);
+  await autoRestoreExcelData();
 }
 
 main();

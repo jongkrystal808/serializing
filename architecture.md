@@ -144,6 +144,10 @@ Base prefix：`/api`
   - `parse_rules`（例如 `arrow,trim`）
   - `file`
   - 支援 `.xls` 與 `.xlsx`（後端自動辨識）
+  - **副作用**：自動將檔案與參數持久化至 `uploads/`
+- `GET /api/excel/load-last`
+  - `customer`
+  - 回傳該客戶最後一次上傳的解析結果（rows, resolved_columns）
 
 ### SN
 - `POST /api/sn/generate`
@@ -220,6 +224,12 @@ Base prefix：`/api`
   - `Quantity <- 生產數量`
   - `Remark <- 機種名稱中 " 1." 起內容`
 - 收據列印尺寸：目標約 A4 直向高度的 1/5（目前 `190mm x 55mm`）
+
+### 4.7 Excel 上傳持久化與自動恢復
+1. 每次透過 `/api/excel/parse` 上傳成功後，後端會將原始檔案與解析參數（sheetName, rules）存入 `backend/data/uploads/` 目錄。
+2. 存檔採分類制：`shared`（營邦/倫飛/超恩/KOYA）、`clg`（Cubepilot）、`hmg`（赫星）。
+3. 前端載入時（`main()`）自動呼叫 `GET /api/excel/load-last?customer={key}`，若有歷史存檔則直接恢復 rowData。
+4. 此機制確保使用者重整頁面後，不需再次上傳即可直接進行查詢操作。
 
 ### 7.4 KOYA
 - label 依數量重複列（前端組裝）
@@ -310,6 +320,11 @@ Base prefix：`/api`
 - 現場來源檔仍存在 `.xls`，單純限制 `.xlsx` 會增加人工轉檔成本
 - 解析層改為依檔案內容與副檔名自動嘗試兩種 reader
 - 無法解析時統一回傳 `INVALID_EXCEL_FILE`（4xx），避免落入 500
+
+### ADR-007: Excel 上傳持久化（已落地）
+- 為改善現場操作體驗，避免重整頁面後資料消失。
+- 後端負擔解析與存檔職責，前端僅負責觸發與渲染。
+- 存檔分類化處理，平衡共用檔案與獨立檔案的需求。
 
 ---
 

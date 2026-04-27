@@ -42,6 +42,10 @@
 
 ## ✅ Done
 
+### ✅ T43 — 實作 Excel 上傳持久化與自動恢復（完成：2026-04-24）
+**Module:** Backend / Frontend / Excel
+**Notes:** 已實作自動記憶最後一次上傳的功能。後端在上傳時會將檔案與參數存入 `backend/data/uploads/`，並提供 `/api/excel/load-last` 接口供恢復資料。前端在 `main()` 初始化時會自動嘗試呼叫此接口，達成「免重複上傳」的目標。
+
 ### ✅ T42 — 新增赫星（hmg）客戶模組（完成：2026-03-18）
 **Module:** HMG / Frontend / Backend
 **Notes:** 已新增 `hmg` 客戶頁籤與獨立上傳流程（`Sheet1`）；查詢改為沿用 Cubepilot 提示清單體驗，並以 Model 前六碼 `contains` 比對。匯出採單 sheet `HEX`（`Model/PN/EAN Code/PCBA`），檔名格式為 `[yyyymmdd]-[Model].xls`。SN 生成流程維持「不輸出 SN 欄」，但歷史主鍵改為 `Model`（`sn_history` + `generation_history`），且規則僅作用於 `hmg` 不影響其他客戶。後端已同步加入 `hmg` allowlist、Excel 欄位 alias 與匯出模板。

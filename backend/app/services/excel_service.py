@@ -76,6 +76,33 @@ COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
 
 
 class ExcelService:
+    def load_from_default_path(self, customer: str) -> ParseExcelResponse:
+        """依 config 設定的固定路徑直接讀取 Excel，不需使用者上傳。"""
+        from pathlib import Path as _Path
+        cfg = settings.default_excel.get(customer)
+        if cfg is None:
+            raise AppError(
+                f"customer '{customer}' 尚未設定預設檔案路徑",
+                code="NO_DEFAULT_PATH",
+                status_code=404,
+            )
+        file_path = _Path(cfg.path)
+        if not file_path.exists():
+            raise AppError(
+                f"找不到預設 Excel 檔案：{cfg.path}",
+                code="DEFAULT_FILE_NOT_FOUND",
+                status_code=404,
+                details={"path": cfg.path},
+            )
+        file_bytes = file_path.read_bytes()
+        payload = ParseExcelRequest(
+            customer=customer,
+            sheet_name=cfg.sheet_name,
+            file_name=file_path.name,
+            parse_rules=cfg.parse_rules,
+        )
+        return self.parse(payload, file_bytes)
+
     def parse(self, payload: ParseExcelRequest, file_bytes: bytes) -> ParseExcelResponse:
         customer = payload.customer.strip()
         if customer not in settings.allowed_customers:

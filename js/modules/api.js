@@ -104,6 +104,13 @@ export async function resetHistoryByApi(payload) {
   });
 }
 
+export async function loadDefaultExcelByApi(customer) {
+  const key = encodeURIComponent(String(customer ?? "").trim());
+  return requestJson(`/excel/load-default?customer=${key}`, {
+    method: "GET"
+  });
+}
+
 export async function exportWorkbookByApi(payload) {
   const response = await fetch(`${API_PREFIX}/export`, {
     method: "POST",
