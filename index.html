@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SN-GENERATOR 序號產生器</title>
+  <link rel="icon" type="image/png" href="./favicon.png">
   <link rel="stylesheet" href="./styles/main.css">
   <script>
     const CUSTOMERS = {
@@ -13,7 +14,7 @@
         sheetName: "營邦出貨",
         parseRules: ["arrow"],
         title: "SN-GENERATOR 營邦序號工具",
-        sourceHint: "來源：使用者上傳 Excel（Sheet：營邦出貨）",
+        sourceHint: "已綁定 Excel（Sheet：營邦出貨）",
         previewNote: "※ 可在 index.html 的 CUSTOMERS.yingbang.previewNote 自訂這裡的備註",
         previewCustomTabs: [],
         searchPlaceholder: "輸入工單號",
@@ -45,7 +46,7 @@
         parseRules: ["arrow"],
 
         title: "SN-GENERATOR 倫飛序號工具",
-        sourceHint: "來源：使用者上傳 Excel（Sheet：倫飛出貨）",
+        sourceHint: "已綁定 Excel（Sheet：倫飛出貨）",
         previewNote: "※ 大箱100/1, 小箱50/1 \nBAG017下的&BAG159, 無法鐳雕,需要列印所有貼紙(除外箱)\nmac貼紙客人提供有序號的都不用印外箱貼紙/大外箱",
         previewCustomTabs: [],
         searchPlaceholder: "輸入 MO",
@@ -78,7 +79,7 @@
         sheetName: "超恩出貨",
         parseRules: ["trim"],
         title: "SN-GENERATOR 超恩序號工具",
-        sourceHint: "來源：使用者上傳 Excel（Sheet：超恩出貨）",
+        sourceHint: "已綁定 Excel（Sheet：超恩出貨）",
         previewNote: "※ 可在 index.html 的 CUSTOMERS.bng.previewNote 自訂這裡的備註",
         previewCustomTabs: [],
         searchPlaceholder: "輸入 MO",
@@ -89,6 +90,7 @@
         columns: {
           MO: "MO",
           DATE: "日期",
+          SOURCE: "來源",
           WORK_ORDER: "工單",
           MODEL: "機種名稱",
           PART_NO: "機種料號",
@@ -104,6 +106,7 @@
         columnAliases: {
           MO: ["MO", "mo"],
           DATE: ["日期", "Date"],
+          SOURCE: ["來源", "拆分標記", "拆分註記", "拆分标记"],
           WORK_ORDER: ["工單", "工單號"],
           MODEL: ["機種名稱", "Model", "MODEL"],
           PART_NO: ["機種料號", "料號", "P/N", "PN"],
@@ -123,7 +126,7 @@
         sheetName: "KOYA出貨",
         parseRules: ["trim"],
         title: "SN-GENERATOR KOYA 標籤工具",
-        sourceHint: "來源：使用者上傳 Excel（Sheet：KOYA出貨）",
+        sourceHint: "已綁定 Excel（Sheet：KOYA出貨）",
         previewNote: "※ 可在 index.html 的 CUSTOMERS.chg.previewNote 自訂這裡的備註",
         previewCustomTabs: [],
         searchPlaceholder: "輸入工單",
@@ -133,6 +136,7 @@
         exportColumns: ["工單", "PN"],
         columns: {
           WORK_ORDER: "工單",
+          WORK_ORDER_MONTH: "工單月份",
           QTY: "小張貼紙",
           MODEL: "機種",
           PN: "PN",
@@ -145,6 +149,7 @@
         },
         columnAliases: {
           WORK_ORDER: ["工單", "工單號"],
+          WORK_ORDER_MONTH: ["工單月份", "月份", "工單月"],
           QTY: ["小張貼紙", "QTY", "Qty", "數量"],
           MODEL: ["機種", "Model", "MODEL"],
           PN: ["PN", "P/N", "料號"],
@@ -159,10 +164,10 @@
       hmg: {
         key: "hmg",
         label: "赫星",
-        sheetName: "Sheet1",
+        sheetName: "組測序號編碼",
         parseRules: ["none"],
         title: "SN-GENERATOR 赫星資料匯出工具",
-        sourceHint: "來源：使用者上傳 Excel（Sheet：Sheet1）",
+        sourceHint: "已綁定 Excel（Sheet：組測序號編碼）",
         previewNote: "",
         previewCustomTabs: [],
         searchPlaceholder: "輸入 Model（可關鍵字）",
@@ -186,10 +191,10 @@
       clg: {
         key: "clg",
         label: "Cubepilot",
-        sheetName: "Sheet1",
+        sheetName: "板階序號編碼",
         parseRules: ["trim"],
         title: "SN-GENERATOR Cubepilot 序號工具",
-        sourceHint: "來源：使用者上傳 Excel（Sheet：Sheet1）",
+        sourceHint: "已綁定 Excel（Sheet：板階序號編碼）",
         previewNote: "",
         previewCustomTabs: [],
         searchPlaceholder: "輸入機種名",
@@ -220,6 +225,79 @@
 <main class="container">
   <h1>SN-GENERATOR 序號工具</h1>
 
+  <section class="home-layout">
+    <aside class="home-layout-sidebar">
+      <section id="home-print-notice-board" class="card home-print-notice-board" aria-live="polite">
+        <div class="home-print-notice-head">
+          <p class="home-print-notice-title">已列印公告欄</p>
+        </div>
+        <div id="home-print-notice-list" class="home-print-notice-list">
+          <p class="home-print-notice-empty">目前沒有已列印公告。</p>
+        </div>
+      </section>
+
+      <section id="home-print-history-panel" class="card" hidden>
+        <h2>列印歷史</h2>
+        <p>顯示每週已勾選完成列印的客戶與工單 / MO。</p>
+      </section>
+    </aside>
+
+    <div class="home-layout-main">
+      <section id="home-shell" class="card">
+        <h2 class="section-title">首頁查詢</h2>
+        <div class="toolbar compact-action-bar">
+          <button id="btn-home-history" class="btn-secondary">查看歷史</button>
+          <div class="search-group">
+            <select id="home-search-type" aria-label="首頁搜尋類型">
+              <option value="workorder">工單 / MO</option>
+              <option value="model">機種（Model）</option>
+            </select>
+            <input id="home-search-input" type="text" placeholder="搜尋全客戶工單 / MO">
+            <button id="btn-home-query" class="btn-search">搜尋</button>
+          </div>
+          <button id="btn-home-export" disabled>生成序號 & 匯出</button>
+          <button id="btn-home-print-bng" class="btn-secondary" disabled>產生收據</button>
+        </div>
+        <button id="btn-clg-settings-toggle" type="button" class="btn-secondary clg-settings-entry" aria-expanded="false" aria-controls="clg-serial-settings-card">自定義序號生成</button>
+        <div class="status-row">
+          <span id="home-loading-indicator" class="loading-indicator" aria-hidden="true"></span>
+          <p id="home-status">目前模式：工單 / MO 搜尋（全客戶）。</p>
+        </div>
+        <div class="home-footer-actions">
+          <button id="btn-home-print-history" type="button" class="btn-secondary">列印歷史</button>
+        </div>
+      </section>
+
+      <section id="clg-serial-settings-card" class="card" hidden>
+        <h2 class="section-title">自定義序號生成</h2>
+        <div class="toolbar clg-serial-toolbar">
+          <input id="clg-prefix-input" type="text" placeholder="前綴（可空白）">
+          <input id="clg-start-input" type="text" placeholder="起始流水號（必填）">
+          <input id="clg-suffix-input" type="text" placeholder="後綴（可空白）">
+          <select id="clg-base-select">
+            <option value="10">10</option>
+            <option value="16">16</option>
+            <option value="cycle_0_6">0–6 循環進位制</option>
+            <option value="cycle_1_6">1–6 循環進位制</option>
+          </select>
+          <input id="clg-count-input" type="number" min="1" step="1" value="1" placeholder="要生產幾個序號">
+        </div>
+        <div id="clg-settings-planned-preview-root"></div>
+      </section>
+
+      <section id="home-preview-panel" class="card">
+        <h2>預覽窗格</h2>
+        <p>查詢後會顯示對應客戶的預覽資訊。</p>
+      </section>
+
+      <section id="home-history-panel" class="card" hidden>
+        <h2>歷史記憶</h2>
+        <p>按「查看歷史」顯示目前查詢目標的歷史資料。</p>
+      </section>
+    </div>
+  </section>
+
+  <div id="legacy-root" hidden>
   <section class="card">
     <h2 class="section-title title-with-help">客戶頁籤
       <button type="button" class="help-inline-trigger" data-help-topic="customer-tabs" aria-label="客戶頁籤使用說明" title="查看使用說明">ⅰ</button>
@@ -235,20 +313,19 @@
   </section>
 
   <section id="yingbang-workspace">
-    <p id="source-hint">來源：使用者上傳 Excel（Sheet：營邦出貨）</p>
+    <p id="source-hint">已綁定 Excel（Sheet：營邦出貨）</p>
 
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定
         <button type="button" class="help-inline-trigger" data-help-topic="source-config" aria-label="資料來源設定使用說明" title="查看使用說明">ⅰ</button>
       </h2>
       <div class="toolbar">
-        <button id="btn-load">上傳共用 Excel</button>
-        <button id="btn-history" class="btn-secondary">查看歷史</button>
+        <button id="btn-load">已綁定 Excel</button>
       </div>
       <input id="file-input" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status">尚未上傳共用 Excel 檔案。</p>
+        <p id="status">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
 
@@ -256,9 +333,12 @@
       <h2 class="section-title title-with-help">查詢與操作
         <button type="button" class="help-inline-trigger" data-help-topic="query-actions" aria-label="查詢與操作使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <div class="toolbar">
-        <input id="search-input" type="text" placeholder="輸入工單號" disabled>
-        <button id="btn-query" disabled>解析工單</button>
+      <div class="toolbar compact-action-bar">
+        <button id="btn-history" class="btn-secondary">查看歷史</button>
+        <div class="search-group">
+          <input id="search-input" type="text" placeholder="輸入工單號" disabled>
+          <button id="btn-query" class="btn-search" disabled>搜尋</button>
+        </div>
         <button id="btn-export" disabled>生成序號 & 匯出</button>
       </div>
     </section>
@@ -267,7 +347,7 @@
       <h2 class="title-with-help">營邦 預覽窗格
         <button type="button" class="help-inline-trigger" data-help-topic="preview-panel" aria-label="預覽窗格使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <p>請先上傳共用 Excel，並輸入工單號後點擊「解析工單」。</p>
+      <p>請先綁定Excel，並輸入工單號後點擊「解析工單」。</p>
     </section>
 
     <section id="history-panel" class="card" hidden>
@@ -277,28 +357,30 @@
   </section>
 
   <section id="lunfei-workspace" hidden>
-    <p>來源：使用者上傳 Excel（Sheet：倫飛出貨）</p>
+    <p>綁定 Excel（Sheet：倫飛出貨）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（倫飛）
         <button type="button" class="help-inline-trigger" data-help-topic="source-config" aria-label="資料來源設定使用說明" title="查看使用說明">ⅰ</button>
       </h2>
       <div class="toolbar">
-        <button id="btn-load-lunfei">上傳共用 Excel</button>
-        <button id="btn-history-lunfei" class="btn-secondary">查看歷史</button>
+        <button id="btn-load-lunfei">已綁定 Excel</button>
       </div>
       <input id="file-input-lunfei" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-lunfei" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-lunfei">尚未上傳共用 Excel 檔案。</p>
+        <p id="status-lunfei">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title title-with-help">查詢與操作（倫飛）
         <button type="button" class="help-inline-trigger" data-help-topic="query-actions" aria-label="查詢與操作使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <div class="toolbar">
-        <input id="search-input-lunfei" type="text" placeholder="輸入 MO" disabled>
-        <button id="btn-query-lunfei" disabled>解析工單</button>
+      <div class="toolbar compact-action-bar">
+        <button id="btn-history-lunfei" class="btn-secondary">查看歷史</button>
+        <div class="search-group">
+          <input id="search-input-lunfei" type="text" placeholder="輸入 MO" disabled>
+          <button id="btn-query-lunfei" class="btn-search" disabled>搜尋</button>
+        </div>
         <button id="btn-export-lunfei" disabled>生成序號 & 匯出</button>
       </div>
     </section>
@@ -306,7 +388,7 @@
       <h2 class="title-with-help">倫飛 預覽窗格
         <button type="button" class="help-inline-trigger" data-help-topic="preview-panel" aria-label="預覽窗格使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <p>請先上傳共用 Excel（需包含「倫飛出貨」Sheet）。</p>
+      <p>請先綁定共用 Excel（需包含「倫飛出貨」Sheet）。</p>
     </section>
     <section id="history-panel-lunfei" class="card" hidden>
       <h2>歷史記憶</h2>
@@ -315,28 +397,30 @@
   </section>
 
   <section id="bng-workspace" hidden>
-    <p>來源：使用者上傳 Excel（Sheet：超恩出貨）</p>
+    <p>已綁定 Excel（Sheet：超恩出貨）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（超恩）
         <button type="button" class="help-inline-trigger" data-help-topic="source-config" aria-label="資料來源設定使用說明" title="查看使用說明">ⅰ</button>
       </h2>
       <div class="toolbar">
-        <button id="btn-load-bng">上傳共用 Excel</button>
-        <button id="btn-history-bng" class="btn-secondary">查看歷史</button>
+        <button id="btn-load-bng">已綁定 Excel</button>
       </div>
       <input id="file-input-bng" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-bng" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-bng">尚未上傳共用 Excel 檔案。</p>
+        <p id="status-bng">尚未綁定共用 Excel共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title title-with-help">查詢與操作（超恩）
         <button type="button" class="help-inline-trigger" data-help-topic="query-actions" aria-label="查詢與操作使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <div class="toolbar">
-        <input id="search-input-bng" type="text" placeholder="輸入 MO" disabled>
-        <button id="btn-query-bng" disabled>解析工單</button>
+      <div class="toolbar compact-action-bar">
+        <button id="btn-history-bng" class="btn-secondary">查看歷史</button>
+        <div class="search-group">
+          <input id="search-input-bng" type="text" placeholder="輸入 MO" disabled>
+          <button id="btn-query-bng" class="btn-search" disabled>搜尋</button>
+        </div>
         <button id="btn-export-bng" disabled>生成序號 & 匯出</button>
         <button id="btn-print-bng" class="btn-secondary" disabled>列印收據明細</button>
       </div>
@@ -345,7 +429,7 @@
       <h2 class="title-with-help">超恩 預覽窗格
         <button type="button" class="help-inline-trigger" data-help-topic="preview-panel" aria-label="預覽窗格使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <p>請先上傳共用 Excel（需包含「超恩出貨」Sheet）。</p>
+      <p>請先綁定共用 Excel（需包含「超恩出貨」Sheet）。</p>
     </section>
     <section id="history-panel-bng" class="card" hidden>
       <h2>歷史記憶</h2>
@@ -354,28 +438,30 @@
   </section>
 
   <section id="chg-workspace" hidden>
-    <p>來源：使用者上傳 Excel（Sheet：KOYA出貨）</p>
+    <p>已綁定 Excel（Sheet：KOYA出貨）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（KOYA）
         <button type="button" class="help-inline-trigger" data-help-topic="source-config" aria-label="資料來源設定使用說明" title="查看使用說明">ⅰ</button>
       </h2>
       <div class="toolbar">
-        <button id="btn-load-chg">上傳共用 Excel</button>
-        <button id="btn-history-chg" class="btn-secondary">查看歷史</button>
+        <button id="btn-load-chg">已綁定 Excel</button>
       </div>
       <input id="file-input-chg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-chg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-chg">尚未上傳共用 Excel 檔案。</p>
+        <p id="status-chg">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title title-with-help">查詢與操作（KOYA）
         <button type="button" class="help-inline-trigger" data-help-topic="query-actions" aria-label="查詢與操作使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <div class="toolbar">
-        <input id="search-input-chg" type="text" placeholder="輸入工單" disabled>
-        <button id="btn-query-chg" disabled>解析工單</button>
+      <div class="toolbar compact-action-bar">
+        <button id="btn-history-chg" class="btn-secondary">查看歷史</button>
+        <div class="search-group">
+          <input id="search-input-chg" type="text" placeholder="輸入工單" disabled>
+          <button id="btn-query-chg" class="btn-search" disabled>搜尋</button>
+        </div>
         <button id="btn-export-chg" disabled>生成序號 & 匯出</button>
       </div>
     </section>
@@ -383,7 +469,7 @@
       <h2 class="title-with-help">KOYA 預覽窗格
         <button type="button" class="help-inline-trigger" data-help-topic="preview-panel" aria-label="預覽窗格使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <p>請先上傳共用 Excel（需包含「KOYA出貨」Sheet）。</p>
+      <p>請先綁定共用 Excel（需包含「KOYA出貨」Sheet）。</p>
     </section>
     <section id="history-panel-chg" class="card" hidden>
       <h2>歷史記憶</h2>
@@ -392,29 +478,31 @@
   </section>
 
   <section id="hmg-workspace" hidden>
-    <p>來源：使用者上傳 Excel（Sheet：Sheet1）</p>
+    <p>已綁定 Excel（Sheet：組測序號編碼）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（赫星）
         <button type="button" class="help-inline-trigger" data-help-topic="source-config" aria-label="資料來源設定使用說明" title="查看使用說明">ⅰ</button>
       </h2>
       <div class="toolbar">
-        <button id="btn-load-hmg">上傳赫星 Excel</button>
-        <button id="btn-history-hmg" class="btn-secondary">查看歷史</button>
+        <button id="btn-load-hmg">已綁定 組測序號 Excel</button>
       </div>
-      <p class="upload-file-hint">請上傳 "H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\組裝、包裝階序號編碼.xls"</p>
+      <p class="upload-file-hint">"H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\組裝、包裝階序號編碼.xls"</p>
       <input id="file-input-hmg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-hmg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-hmg">尚未上傳赫星 Excel 檔案。</p>
+        <p id="status-hmg">尚未綁定赫星 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title title-with-help">查詢與操作（赫星）
         <button type="button" class="help-inline-trigger" data-help-topic="query-actions" aria-label="查詢與操作使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <div class="toolbar">
-        <input id="search-input-hmg" type="text" placeholder="輸入 Model（可關鍵字）" disabled>
-        <button id="btn-query-hmg" disabled>查詢機種</button>
+      <div class="toolbar compact-action-bar">
+        <button id="btn-history-hmg" class="btn-secondary">查看歷史</button>
+        <div class="search-group">
+          <input id="search-input-hmg" type="text" placeholder="輸入 Model（可關鍵字）" disabled>
+          <button id="btn-query-hmg" class="btn-search" disabled>搜尋機種</button>
+        </div>
         <button id="btn-export-hmg" disabled>匯出 HEX</button>
       </div>
       <div id="hmg-suggest-panel" class="clg-suggest-panel" hidden></div>
@@ -423,7 +511,7 @@
       <h2 class="title-with-help">赫星 預覽窗格
         <button type="button" class="help-inline-trigger" data-help-topic="preview-panel" aria-label="預覽窗格使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <p>請先上傳赫星 Excel（Sheet1），再輸入 Model 關鍵字查詢。</p>
+      <p>請先綁定赫星 Excel（組測序號編碼），再輸入 Model 關鍵字查詢。</p>
     </section>
     <section id="history-panel-hmg" class="card" hidden>
       <h2>歷史記憶</h2>
@@ -432,59 +520,47 @@
   </section>
 
   <section id="clg-workspace" hidden>
-    <p>來源：使用者上傳 Excel（Sheet：Sheet1）</p>
+    <p>已綁定 Excel（Sheet：板階序號編碼）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（Cubepilot）
         <button type="button" class="help-inline-trigger" data-help-topic="source-config" aria-label="資料來源設定使用說明" title="查看使用說明">ⅰ</button>
       </h2>
       <div class="toolbar">
-        <button id="btn-load-clg">上傳 Cubepilot Excel（選填）</button>
-        <button id="btn-history-clg" class="btn-secondary">查看歷史</button>
+        <button id="btn-load-clg">已綁定板階序號 Excel</button>
       </div>
-      <p class="upload-file-hint">請上傳 "H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\PCB板階、測試階序號编码.xls"</p>
+      <p class="upload-file-hint">"H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\PCB板階、測試階序號编碼.xls"</p>
       <input id="file-input-clg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-clg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-clg">尚未上傳 Cubepilot Excel（可直接使用序號生成設定）。</p>
+        <p id="status-clg">可直接使用自定義序號生成</p>
       </div>
     </section>
     <section class="card">
       <h2 class="section-title title-with-help">查詢與操作（Cubepilot）
         <button type="button" class="help-inline-trigger" data-help-topic="query-actions" aria-label="查詢與操作使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <div class="toolbar">
-        <input id="search-input-clg" type="text" placeholder="輸入機種名（可關鍵字）" disabled>
-        <button id="btn-query-clg" disabled>查詢機種</button>
+      <div class="toolbar compact-action-bar">
+        <button id="btn-history-clg" class="btn-secondary">查看歷史</button>
+        <div class="search-group">
+          <input id="search-input-clg" type="text" placeholder="輸入機種名（可關鍵字）" disabled>
+          <button id="btn-query-clg" class="btn-search" disabled>搜尋機種</button>
+        </div>
         <button id="btn-export-clg" disabled>生成序號 & 匯出</button>
       </div>
       <div id="clg-suggest-panel" class="clg-suggest-panel" hidden></div>
-    </section>
-    <section class="card">
-      <h2 class="section-title">序號生成設定（Cubepilot）</h2>
-      <div class="toolbar clg-serial-toolbar">
-        <input id="clg-prefix-input" type="text" placeholder="前綴（可空白）">
-        <input id="clg-start-input" type="text" placeholder="起始流水號（必填）">
-        <input id="clg-suffix-input" type="text" placeholder="後綴（可空白）">
-        <select id="clg-base-select">
-          <option value="10">10</option>
-          <option value="16">16</option>
-          <option value="cycle_0_6">0–6 循環進位制</option>
-          <option value="cycle_1_6">1–6 循環進位制</option>
-        </select>
-        <input id="clg-count-input" type="number" min="1" step="1" value="1" placeholder="要生產幾個序號">
-      </div>
     </section>
     <section id="preview-panel-clg" class="card">
       <h2 class="title-with-help">Cubepilot 預覽窗格
         <button type="button" class="help-inline-trigger" data-help-topic="preview-panel" aria-label="預覽窗格使用說明" title="查看使用說明">ⅰ</button>
       </h2>
-      <p>可直接使用序號生成設定；若上傳 Excel（Sheet1）可搭配機種資料查詢。</p>
+      <p>可直接使用自定義序號生成；已綁定 Excel（板階序號編碼）可搭配機種資料查詢。</p>
     </section>
     <section id="history-panel-clg" class="card" hidden>
       <h2>歷史記憶</h2>
       <p>按「查看歷史」以顯示目前歷史資料。</p>
     </section>
   </section>
+  </div>
   <section id="bng-receipt-print-root" class="bng-receipt-print-root" hidden aria-hidden="true"></section>
 </main>
 <script type="module" src="./js/app.js"></script>

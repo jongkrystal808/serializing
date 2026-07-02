@@ -21,7 +21,10 @@ import {
   getHistoryByApi,
   upsertHistoryByApi,
   resetHistoryByApi,
-  exportWorkbookByApi
+  exportWorkbookByApi,
+  getPrintNoticesByApi,
+  upsertPrintNoticeByApi,
+  deletePrintNoticeByApi
 } from "./modules/api.js";
 import {
   findWorkOrderRows,
@@ -30,7 +33,18 @@ import {
   resolveWorkOrderQty,
   resolveQtyByPairedSlash
 } from "./modules/workOrder.js";
-import { escapeHtml, normalizeRangeText } from "./modules/utils.js";
+import { escapeHtml, normalizeRangeText, normalizeText } from "./modules/utils.js";
+import { createHomeController } from "./modules/homeController.js";
+import { resolveCustomerColumnKey, getRowValueByCustomerColumnCode } from "./modules/customerColumns.js";
+import {
+  buildClgPlannedSerialPreview,
+  buildClgSerialList,
+  getClgInputValues
+} from "./modules/serialSettings.js";
+import {
+  buildBngReceiptPrintPayload,
+  renderBngReceiptPrintHtml
+} from "./modules/bngReceipt.js";
 import {
   updateStatus,
   renderLoadResult,
@@ -58,7 +72,8 @@ import {
   bindClearHistoryButton,
   bindClearHistoryButtonIn,
   bindHistoryResetButtons,
-  bindHistoryResetButtonsIn
+  bindHistoryResetButtonsIn,
+  copyTextToClipboard
 } from "./modules/ui.js";
 
 const ui = createUiRefs();
@@ -67,22 +82,30 @@ const SHARED_PARSE_FALLBACKS = {
   lunfei: { sheetName: "倫飛出貨", parseRules: ["arrow"] },
   bng: { sheetName: "超恩出貨", parseRules: ["trim"] },
   chg: { sheetName: "KOYA出貨", parseRules: ["trim"] },
-  hmg: { sheetName: "Sheet1", parseRules: ["none"] },
-  clg: { sheetName: "Sheet1", parseRules: ["trim"] }
+  hmg: { sheetName: "組測序號編碼", parseRules: ["trim"] },
+  clg: { sheetName: "板階序號編碼", parseRules: ["none"] }
 };
 const PREVIEW_CUSTOM_TABS_STORAGE_KEY = "sn_preview_custom_tabs";
 const SHARED_CUSTOMER_KEYS = ["yingbang", "lunfei", "bng", "chg"];
+const PRINTED_NOTICE_CUSTOMER_LABELS = {
+  yingbang: "營邦",
+  lunfei: "倫飛",
+  bng: "超恩",
+  chg: "KOYA"
+};
+const PRINT_NOTICE_BOARD_WINDOW_DAYS = 7;
+const PRINT_HISTORY_WINDOW_WEEKS = 8;
 const USAGE_HELP_MESSAGES = {
   "customer-tabs": [
     "客戶頁籤使用方式：",
     "1. 先點選上方客戶頁籤切換當前作業客戶。",
     "2. 切換後，下方資料來源與查詢規則會跟著該客戶改變。",
-    "3. 營邦/倫飛/超恩/KOYA 共用上傳檔；赫星與 Cubepilot 為獨立上傳。"
+    "3. 營邦/倫飛/超恩/KOYA 共用文檔；赫星與 Cubepilot 為獨立文檔。"
   ].join("\n"),
   "source-config": [
     "資料來源設定使用方式：",
-    "1. 點擊「上傳 ... Excel」選擇來源檔案。",
-    "2. 上傳完成後，狀態列會顯示載入結果。",
+    "1. 刷新頁面載入檔案。",
+    "2. 狀態列會顯示載入結果。",
     "3. 需要回看歷史時，點「查看歷史」。"
   ].join("\n"),
   "query-actions": [
@@ -97,6 +120,12 @@ const USAGE_HELP_MESSAGES = {
     "2. 可切換「預覽 / 表格內容 / 生成歷史」頁籤。",
     "3. 可使用「複製」按鈕或點表格儲存格快速複製內容。"
   ].join("\n")
+};
+const homeRuntime = {
+  customer: "",
+  query: "",
+  pendingModelCustomer: "",
+  pendingModelRows: []
 };
 
 function buildParseTarget(customerKey) {
@@ -145,6 +174,378 @@ function writeStoredPreviewCustomTabs(data) {
   } catch (error) {
     // ignore localStorage errors
   }
+}
+
+function normalizePrintedNoticeEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const customerKey = String(entry.customerKey ?? entry.customer ?? "").trim();
+  const customerLabel = String(entry.customerLabel ?? entry.customer_label ?? "").trim();
+  const workOrderLabel = String(entry.workOrderLabel ?? entry.workorder_label ?? "").trim();
+  const workOrderValue = String(entry.workOrderValue ?? entry.workorder_value ?? "").trim();
+  if (!customerKey || !customerLabel || !workOrderValue) {
+    return null;
+  }
+  const createdAtValue = entry.createdAt ?? entry.created_at ?? "";
+  const createdAtTimestamp = Date.parse(String(createdAtValue).trim());
+  return {
+    customerKey,
+    customerLabel,
+    workOrderLabel: workOrderLabel || "工單",
+    workOrderValue,
+    createdAt: Number.isFinite(createdAtTimestamp) ? createdAtTimestamp : Date.now()
+  };
+}
+
+function buildPrintedNoticeKey(customerKey, workOrderValue) {
+  return `${String(customerKey ?? "").trim()}::${String(workOrderValue ?? "").trim()}`;
+}
+
+function getPrintedNoticeEntries() {
+  return (Array.isArray(state.printNoticeEntries) ? state.printNoticeEntries : [])
+    .map((entry) => normalizePrintedNoticeEntry(entry))
+    .filter(Boolean)
+    .sort((a, b) => Number(b.createdAt) - Number(a.createdAt));
+}
+
+function getActivePrintedNoticeEntries() {
+  const now = Date.now();
+  const maxAge = PRINT_NOTICE_BOARD_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return getPrintedNoticeEntries().filter((entry) => now - Number(entry.createdAt) < maxAge);
+}
+
+function isPrintedNoticeChecked(customerKey, workOrderValue) {
+  const entryKey = buildPrintedNoticeKey(customerKey, workOrderValue);
+  return getPrintedNoticeEntries().some((entry) =>
+    buildPrintedNoticeKey(entry.customerKey, entry.workOrderValue) === entryKey
+  );
+}
+
+function upsertPrintedNoticeInState(entry) {
+  const normalizedEntry = normalizePrintedNoticeEntry(entry);
+  if (!normalizedEntry) {
+    return;
+  }
+  const entryKey = buildPrintedNoticeKey(normalizedEntry.customerKey, normalizedEntry.workOrderValue);
+  const nextEntries = getPrintedNoticeEntries()
+    .filter((item) => buildPrintedNoticeKey(item.customerKey, item.workOrderValue) !== entryKey);
+  nextEntries.unshift(normalizedEntry);
+  state.printNoticeEntries = nextEntries;
+}
+
+function removePrintedNoticeInState(customerKey, workOrderValue) {
+  const entryKey = buildPrintedNoticeKey(customerKey, workOrderValue);
+  const nextEntries = getPrintedNoticeEntries()
+    .filter((entry) => buildPrintedNoticeKey(entry.customerKey, entry.workOrderValue) !== entryKey);
+  state.printNoticeEntries = nextEntries;
+}
+
+function renderHomePrintNoticeBoard() {
+  if (!ui.homePrintNoticeList) {
+    return;
+  }
+  const entries = getActivePrintedNoticeEntries();
+  if (entries.length === 0) {
+    ui.homePrintNoticeList.innerHTML = `<p class="home-print-notice-empty">目前沒有近 ${PRINT_NOTICE_BOARD_WINDOW_DAYS} 天已列印公告。</p>`;
+    return;
+  }
+  ui.homePrintNoticeList.innerHTML = entries
+    .map((entry) => `
+      <article class="home-print-notice-item" data-customer-key="${escapeHtml(entry.customerKey)}">
+        <span class="home-print-notice-customer">${escapeHtml(entry.customerLabel)}</span>
+        <span class="home-print-notice-date">${escapeHtml(formatPrintedNoticeDate(entry.createdAt))}</span>
+        <p class="home-print-notice-main">${escapeHtml(entry.workOrderValue)}${escapeHtml(entry.workOrderLabel)}已列印</p>
+      </article>
+    `)
+    .join("");
+}
+
+function getWeekRangeLabel(timestamp) {
+  const date = new Date(Number(timestamp));
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(date);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() + diffToMonday);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const formatDate = (value) => {
+    const yyyy = value.getFullYear();
+    const mm = String(value.getMonth() + 1).padStart(2, "0");
+    const dd = String(value.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  };
+  return `${formatDate(weekStart)} ~ ${formatDate(weekEnd)}`;
+}
+
+function getWeekStartTimestamp(timestamp) {
+  const date = new Date(Number(timestamp));
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const weekStart = new Date(date);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(weekStart.getDate() + diffToMonday);
+  return weekStart.getTime();
+}
+
+function getRecentPrintHistoryEntries() {
+  const now = Date.now();
+  const maxAge = PRINT_HISTORY_WINDOW_WEEKS * 7 * 24 * 60 * 60 * 1000;
+  return getPrintedNoticeEntries().filter((entry) => now - Number(entry.createdAt) < maxAge);
+}
+
+function getFilteredPrintHistoryEntries() {
+  const entries = getRecentPrintHistoryEntries();
+  const filter = String(state.printHistoryCustomerFilter ?? "all").trim();
+  if (!filter || filter === "all") {
+    return entries;
+  }
+  return entries.filter((entry) => String(entry.customerKey ?? "").trim() === filter);
+}
+
+function getPrintHistoryCustomerOptions(entries) {
+  const used = new Set();
+  const options = [{
+    value: "all",
+    label: "全部客戶"
+  }];
+  entries.forEach((entry) => {
+    const key = String(entry.customerKey ?? "").trim();
+    if (!key || used.has(key)) {
+      return;
+    }
+    used.add(key);
+    options.push({
+      value: key,
+      label: PRINTED_NOTICE_CUSTOMER_LABELS[key] || entry.customerLabel || key
+    });
+  });
+  return options;
+}
+
+function renderHomePrintHistoryPanel() {
+  if (!ui.homePrintHistoryPanel) {
+    return;
+  }
+  const recentEntries = getRecentPrintHistoryEntries();
+  const entries = getFilteredPrintHistoryEntries();
+  const filterOptions = getPrintHistoryCustomerOptions(recentEntries)
+    .map((item) => `<option value="${escapeHtml(item.value)}"${item.value === state.printHistoryCustomerFilter ? " selected" : ""}>${escapeHtml(item.label)}</option>`)
+    .join("");
+  const toolbarHtml = `
+    <div class="print-history-toolbar">
+      <p class="print-history-summary">只顯示最近 ${PRINT_HISTORY_WINDOW_WEEKS} 週，共 ${entries.length} 筆。</p>
+      <select id="home-print-history-customer-filter" aria-label="列印歷史客戶篩選">
+        ${filterOptions}
+      </select>
+    </div>
+  `;
+  if (entries.length === 0) {
+    ui.homePrintHistoryPanel.innerHTML = `
+      <h2>列印歷史</h2>
+      ${toolbarHtml}
+      <div class="error-box">目前沒有符合條件的列印歷史。</div>
+    `;
+    return;
+  }
+  const groupMap = new Map();
+  entries.forEach((entry) => {
+    const weekStartTimestamp = getWeekStartTimestamp(entry.createdAt);
+    const weekLabel = getWeekRangeLabel(entry.createdAt);
+    const groupKey = `${weekStartTimestamp}::${weekLabel}`;
+    if (!groupMap.has(groupKey)) {
+      groupMap.set(groupKey, {
+        weekStartTimestamp,
+        weekLabel,
+        items: []
+      });
+    }
+    groupMap.get(groupKey).items.push(entry);
+  });
+  const weeksHtml = Array.from(groupMap.values())
+    .sort((a, b) => Number(b.weekStartTimestamp) - Number(a.weekStartTimestamp))
+    .map((group) => {
+      const itemsHtml = group.items.map((entry) => `
+        <div class="print-history-item">
+          <p class="print-history-item-main">${escapeHtml(entry.customerLabel)}-${escapeHtml(entry.workOrderValue)}${escapeHtml(entry.workOrderLabel)}已列印</p>
+          <div class="print-history-item-actions">
+            <p class="print-history-item-time">${escapeHtml(formatPrintedNoticeTime(entry.createdAt))}</p>
+            <button
+              type="button"
+              class="print-history-delete-btn"
+              data-action="delete-print-history-item"
+              data-customer-key="${escapeHtml(entry.customerKey)}"
+              data-workorder-value="${escapeHtml(entry.workOrderValue)}"
+            >清除</button>
+          </div>
+        </div>
+      `).join("");
+      return `
+        <section class="print-history-week">
+          <h3 class="print-history-week-title">${escapeHtml(group.weekLabel)}</h3>
+          <div class="print-history-list">${itemsHtml}</div>
+        </section>
+      `;
+    })
+    .join("");
+  ui.homePrintHistoryPanel.innerHTML = `
+    <h2>列印歷史</h2>
+    ${toolbarHtml}
+    ${weeksHtml}
+  `;
+}
+
+function formatPrintedNoticeTime(timestamp) {
+  const date = new Date(Number(timestamp));
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  const hh = String(date.getHours()).padStart(2, "0");
+  const min = String(date.getMinutes()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd} ${hh}:${min}`;
+}
+
+function formatPrintedNoticeDate(timestamp) {
+  const date = new Date(Number(timestamp));
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const dd = String(date.getDate()).padStart(2, "0");
+  return `${yyyy}.${mm}.${dd}`;
+}
+
+function syncPrintedToggleCheckboxes(customerKey, workOrderValue, checked) {
+  const normalizedCustomerKey = String(customerKey ?? "").trim();
+  const normalizedWorkOrderValue = String(workOrderValue ?? "").trim();
+  document.querySelectorAll('[data-role="printed-toggle"]').forEach((input) => {
+    if (
+      String(input.dataset.customerKey ?? "").trim() !== normalizedCustomerKey ||
+      String(input.dataset.workorderValue ?? "").trim() !== normalizedWorkOrderValue
+    ) {
+      return;
+    }
+    input.checked = Boolean(checked);
+  });
+}
+
+function bindPrintedToggleIn(rootElement) {
+  if (!rootElement) {
+    return;
+  }
+  rootElement.querySelectorAll('[data-role="printed-toggle"]').forEach((input) => {
+    if (input.__printedToggleBound === true) {
+      return;
+    }
+    input.__printedToggleBound = true;
+    input.addEventListener("change", async () => {
+      const entry = {
+        customerKey: input.dataset.customerKey,
+        customerLabel: input.dataset.customerLabel,
+        workOrderLabel: input.dataset.workorderLabel,
+        workOrderValue: input.dataset.workorderValue
+      };
+      const nextChecked = Boolean(input.checked);
+      syncPrintedToggleCheckboxes(entry.customerKey, entry.workOrderValue, nextChecked);
+      try {
+        if (nextChecked) {
+          const result = await upsertPrintNoticeByApi({
+            customer: entry.customerKey,
+            customer_label: entry.customerLabel,
+            workorder_label: entry.workOrderLabel,
+            workorder_value: entry.workOrderValue
+          });
+          upsertPrintedNoticeInState(result.entry || {
+            customer: entry.customerKey,
+            customer_label: entry.customerLabel,
+            workorder_label: entry.workOrderLabel,
+            workorder_value: entry.workOrderValue
+          });
+        } else {
+          await deletePrintNoticeByApi({
+            customer: entry.customerKey,
+            workorder_value: entry.workOrderValue
+          });
+          removePrintedNoticeInState(entry.customerKey, entry.workOrderValue);
+        }
+        renderHomePrintNoticeBoard();
+        renderHomePrintHistoryPanel();
+      } catch (error) {
+        syncPrintedToggleCheckboxes(entry.customerKey, entry.workOrderValue, !nextChecked);
+        updateHomeStatus(`列印公告更新失敗：${getSafeErrorMessage(error)}`, true);
+      }
+    });
+  });
+}
+
+async function loadPrintNoticeBoard() {
+  const result = await getPrintNoticesByApi();
+  state.printNoticeEntries = Array.isArray(result.entries) ? result.entries : [];
+  renderHomePrintNoticeBoard();
+  renderHomePrintHistoryPanel();
+}
+
+function toggleHomePrintHistoryPanel() {
+  if (!ui.homePrintHistoryPanel) {
+    return;
+  }
+  const nextHidden = !ui.homePrintHistoryPanel.hidden;
+  if (!nextHidden) {
+    renderHomePrintHistoryPanel();
+  }
+  ui.homePrintHistoryPanel.hidden = nextHidden;
+}
+
+async function onHomePrintHistoryPanelClick(event) {
+  const deleteButton = event.target.closest('[data-action="delete-print-history-item"]');
+  if (!deleteButton) {
+    return;
+  }
+  const customerKey = String(deleteButton.getAttribute("data-customer-key") ?? "").trim();
+  const workOrderValue = String(deleteButton.getAttribute("data-workorder-value") ?? "").trim();
+  if (!customerKey || !workOrderValue) {
+    return;
+  }
+  const confirmed = window.confirm(`確定清除 ${workOrderValue} 的列印歷史？`);
+  if (!confirmed) {
+    return;
+  }
+  try {
+    await deletePrintNoticeByApi({
+      customer: customerKey,
+      workorder_value: workOrderValue
+    });
+    removePrintedNoticeInState(customerKey, workOrderValue);
+    syncPrintedToggleCheckboxes(customerKey, workOrderValue, false);
+    renderHomePrintNoticeBoard();
+    renderHomePrintHistoryPanel();
+    updateHomeStatus(`已清除 ${workOrderValue} 的列印歷史。`, false, false, true);
+  } catch (error) {
+    updateHomeStatus(`清除列印歷史失敗：${getSafeErrorMessage(error)}`, true);
+  }
+}
+
+function onHomePrintHistoryPanelChange(event) {
+  const select = event.target.closest("#home-print-history-customer-filter");
+  if (!select) {
+    return;
+  }
+  state.printHistoryCustomerFilter = String(select.value ?? "all").trim() || "all";
+  renderHomePrintHistoryPanel();
+}
+
+function buildPrintNotice(customerKey, workOrderLabel, workOrderValue) {
+  const normalizedCustomerKey = String(customerKey ?? "").trim();
+  const normalizedWorkOrderValue = String(workOrderValue ?? "").trim();
+  if (!normalizedCustomerKey || !normalizedWorkOrderValue) {
+    return null;
+  }
+  return {
+    customerKey: normalizedCustomerKey,
+    customerLabel: PRINTED_NOTICE_CUSTOMER_LABELS[normalizedCustomerKey] || normalizedCustomerKey,
+    workOrderLabel: String(workOrderLabel ?? "").trim() || "工單",
+    workOrderValue: normalizedWorkOrderValue,
+    checked: isPrintedNoticeChecked(normalizedCustomerKey, normalizedWorkOrderValue)
+  };
 }
 
 // 【用途】取得客戶設定物件，若不存在則回傳 null
@@ -498,6 +899,94 @@ function setClgLoading(isLoading, message = "") {
   }
 }
 
+// 【用途】更新首頁狀態文字，供單一首頁模式顯示查詢/匯出結果
+function updateHomeStatus(message, isError = false, isLoading = false, isSuccess = false) {
+  if (!ui.homeStatus) {
+    return;
+  }
+  ui.homeStatus.textContent = message;
+  if (isError) {
+    ui.homeStatus.className = "error";
+    return;
+  }
+  if (isLoading) {
+    ui.homeStatus.className = "loading";
+    return;
+  }
+  if (isSuccess) {
+    ui.homeStatus.className = "success";
+    return;
+  }
+  ui.homeStatus.className = "";
+}
+
+// 【用途】控制首頁載入狀態與查詢按鈕可用性
+function setHomeLoading(isLoading, message = "") {
+  if (ui.homeLoadingIndicator) {
+    ui.homeLoadingIndicator.classList.toggle("active", isLoading);
+  }
+  if (ui.homeQueryBtn) {
+    ui.homeQueryBtn.disabled = isLoading;
+  }
+  if (ui.homeHistoryBtn) {
+    ui.homeHistoryBtn.disabled = isLoading;
+  }
+  if (ui.homePrintHistoryBtn) {
+    ui.homePrintHistoryBtn.disabled = isLoading;
+  }
+  if (ui.homeBngPrintBtn) {
+    if (isLoading) {
+      ui.homeBngPrintBtn.disabled = true;
+    }
+  }
+  if (ui.homeSearchInput) {
+    ui.homeSearchInput.disabled = isLoading;
+  }
+  if (ui.homeSearchTypeSelect) {
+    ui.homeSearchTypeSelect.disabled = isLoading;
+  }
+  if (message) {
+    updateHomeStatus(message, false, isLoading);
+  }
+}
+
+// 【用途】依目前首頁命中結果控制匯出按鈕
+function setHomeExportEnabled(enabled) {
+  if (!ui.homeExportBtn) {
+    return;
+  }
+  ui.homeExportBtn.disabled = !enabled;
+}
+
+// 【用途】控制首頁 BNG 收據按鈕（僅命中 bng 工單時啟用）
+function setHomeBngPrintEnabled(enabled) {
+  if (!ui.homeBngPrintBtn) {
+    return;
+  }
+  ui.homeBngPrintBtn.disabled = !enabled;
+}
+
+// 【用途】控制 Cubepilot 序號生成設定卡片的展開/收合狀態
+function setClgSettingsVisibility(isVisible) {
+  if (!ui.clgSerialSettingsCard || !ui.clgSettingsToggleBtn) {
+    return;
+  }
+  const visible = Boolean(isVisible);
+  ui.clgSerialSettingsCard.hidden = !visible;
+  ui.clgSettingsToggleBtn.setAttribute("aria-expanded", visible ? "true" : "false");
+  ui.clgSettingsToggleBtn.textContent = visible
+    ? "收合自定義序號生成"
+    : "自定義序號生成";
+}
+
+// 【用途】切換 Cubepilot 序號生成設定卡片顯示狀態
+function toggleClgSettingsVisibility() {
+  if (!ui.clgSerialSettingsCard) {
+    return;
+  }
+  setClgSettingsVisibility(ui.clgSerialSettingsCard.hidden);
+}
+
 function setAllCustomerLoading(isLoading, message = "") {
   setLoading(isLoading, message);
   setLunfeiLoading(isLoading, message);
@@ -551,6 +1040,7 @@ function resetDataForCustomerSwitch() {
   ui.clgSearchInput.disabled = state.clgRowData.length === 0;
   ui.clgQueryBtn.disabled = state.clgRowData.length === 0;
   updateClgExportEnabledBySettings();
+  setClgSettingsVisibility(false);
   hideClgSuggestPanel();
 }
 
@@ -613,20 +1103,6 @@ function getCurrentRowValue(columnCode) {
   return String(state.currentRow[key] ?? "").trim();
 }
 
-function getRowValueByHeaderCandidates(row, headers) {
-  if (!row || !Array.isArray(headers)) {
-    return "";
-  }
-  const rowKeys = Object.keys(row);
-  for (const header of headers) {
-    const foundKey = rowKeys.find((key) => String(key).trim().toLowerCase() === String(header).trim().toLowerCase());
-    if (foundKey) {
-      return String(row[foundKey] ?? "").trim();
-    }
-  }
-  return "";
-}
-
 // 【用途】依欄位代碼取得超恩列印用欄位值（支援 alias 對應）
 function getBngColumnValue(row, columnCode) {
   if (!row) {
@@ -636,102 +1112,12 @@ function getBngColumnValue(row, columnCode) {
   return String(row[key] ?? "").trim();
 }
 
-// 【用途】將超恩機種名稱拆成 Model 與 Remark（Remark 含 " 1." 起始字串）
-function splitBngModelAndRemark(modelValue) {
-  const text = String(modelValue ?? "").trim();
-  const marker = " 1.";
-  const markerIndex = text.indexOf(marker);
-  if (markerIndex < 0) {
-    return {
-      model: text,
-      remark: ""
-    };
-  }
-  return {
-    model: text.slice(0, markerIndex).trim(),
-    remark: text.slice(markerIndex).trim()
-  };
-}
-
-// 【用途】組裝超恩收據明細列印資料（對應套印欄位）
-function buildBngReceiptPrintPayload(row) {
-  const mo = getBngColumnValue(row, "MO");
-  const workOrder = getBngColumnValue(row, "WORK_ORDER");
-  const modelRaw = getBngColumnValue(row, "MODEL");
-  const parsedModel = splitBngModelAndRemark(modelRaw);
-  const ddcModel = getRowValueByHeaderCandidates(row, ["DDC Model", "Model", "MODEL"]) || parsedModel.model || modelRaw;
-  const partNo = getBngColumnValue(row, "PART_NO");
-  const qty = getBngColumnValue(row, "QTY");
-  const macQty = getBngColumnValue(row, "MAC_QTY");
-  const macRange = normalizeRangeText(getBngColumnValue(row, "MAC_RANGE"));
-
-  return {
-    mo,
-    ddcModel,
-    workOrder,
-    model: parsedModel.model,
-    macQty,
-    partNo,
-    macRange,
-    qty,
-    remark: parsedModel.remark
-  };
-}
-
-// 【用途】渲染超恩收據明細列印版型（對照客戶套印欄位）
-function renderBngReceiptPrintHtml(payload) {
-  return `
-    <section class="bng-receipt-print-sheet">
-      <table class="bng-receipt-print-table">
-        <colgroup>
-          <col class="bng-receipt-col-1">
-          <col class="bng-receipt-col-2">
-          <col class="bng-receipt-col-3">
-          <col class="bng-receipt-col-4">
-          <col class="bng-receipt-col-5">
-          <col class="bng-receipt-col-6">
-        </colgroup>
-        <tbody>
-          <tr>
-            <th class="bng-receipt-label">MO</th>
-            <td class="bng-receipt-value">${escapeHtml(payload.mo)}</td>
-            <th class="bng-receipt-label">DDC Model</th>
-            <td class="bng-receipt-value">${escapeHtml(payload.ddcModel)}</td>
-            <th class="bng-receipt-label">Work Order Number</th>
-            <td class="bng-receipt-value">${escapeHtml(payload.workOrder)}</td>
-          </tr>
-          <tr>
-            <th class="bng-receipt-label">Model</th>
-            <td class="bng-receipt-value" colspan="2">${escapeHtml(payload.model)}</td>
-            <th class="bng-receipt-label">Number of MACs</th>
-            <td class="bng-receipt-value">${escapeHtml(payload.macQty)}</td>
-            <td class="bng-receipt-unit">PCS</td>
-          </tr>
-          <tr>
-            <th class="bng-receipt-label">Part Number</th>
-            <td class="bng-receipt-value" colspan="2">${escapeHtml(payload.partNo)}</td>
-            <th class="bng-receipt-label">MAC range</th>
-            <td class="bng-receipt-value" colspan="2">${escapeHtml(payload.macRange)}</td>
-          </tr>
-          <tr>
-            <th class="bng-receipt-label">Quantity</th>
-            <td class="bng-receipt-value">${escapeHtml(payload.qty)}</td>
-            <td class="bng-receipt-unit">pcs</td>
-            <th class="bng-receipt-label">Remark</th>
-            <td colspan="2" class="bng-receipt-remark">${escapeHtml(payload.remark)}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-  `;
-}
-
 // 【用途】掛載超恩收據列印節點並切換成列印模式
 function mountBngReceiptPrintView(payload) {
   if (!ui.bngReceiptPrintRoot) {
     throw new Error("找不到超恩收據列印區塊。");
   }
-  ui.bngReceiptPrintRoot.innerHTML = renderBngReceiptPrintHtml(payload);
+  ui.bngReceiptPrintRoot.innerHTML = renderBngReceiptPrintHtml(payload, escapeHtml);
   ui.bngReceiptPrintRoot.hidden = false;
   ui.bngReceiptPrintRoot.setAttribute("aria-hidden", "false");
   document.body.classList.add("printing-bng-receipt");
@@ -781,132 +1167,6 @@ function getResolvedQty(row, query) {
   return resolveWorkOrderQty(row, query, rawQty);
 }
 
-function normalizeClgBase(rawBase) {
-  const value = String(rawBase ?? "10").trim();
-  if (value === "16") {
-    return "16";
-  }
-  if (value === "cycle_0_6") {
-    return "cycle_0_6";
-  }
-  if (value === "cycle_1_6") {
-    return "cycle_1_6";
-  }
-  return "10";
-}
-
-function getClgInputValues() {
-  return {
-    prefix: String(ui.clgPrefixInput?.value ?? "").trim(),
-    startSerial: String(ui.clgStartInput?.value ?? "").trim(),
-    countText: String(ui.clgCountInput?.value ?? "").trim(),
-    suffix: String(ui.clgSuffixInput?.value ?? "").trim(),
-    base: normalizeClgBase(ui.clgBaseSelect?.value)
-  };
-}
-
-function toBigIntByBase(text, base) {
-  const value = String(text ?? "").trim().toUpperCase();
-  if (!value) {
-    throw new Error("起始流水號不可空白。");
-  }
-  if (base === "16") {
-    if (!/^[0-9A-F]+$/.test(value)) {
-      throw new Error("起始流水號格式不正確（16 進制只允許 0-9、A-F）。");
-    }
-    return BigInt(`0x${value}`);
-  }
-  if (base === "cycle_0_6") {
-    if (!/^\d+$/.test(value)) {
-      throw new Error("起始流水號格式不正確（0–6 循環進位制只允許數字）。");
-    }
-    if (!/[0-6]$/.test(value)) {
-      throw new Error("起始流水號格式不正確（0–6 循環進位制個位數必須是 0~6）。");
-    }
-    return BigInt(value);
-  }
-  if (base === "cycle_1_6") {
-    if (!/^\d+$/.test(value)) {
-      throw new Error("起始流水號格式不正確（1–6 循環進位制只允許數字）。");
-    }
-    if (!/[1-6]$/.test(value)) {
-      throw new Error("起始流水號格式不正確（1–6 循環進位制個位數必須是 1~6）。");
-    }
-    return BigInt(value);
-  }
-  if (!/^\d+$/.test(value)) {
-    throw new Error("起始流水號格式不正確（10 進制只允許數字）。");
-  }
-  return BigInt(value);
-}
-
-function formatByBase(valueBigInt, base) {
-  if (base === "16") {
-    return valueBigInt.toString(16).toUpperCase();
-  }
-  return valueBigInt.toString(10);
-}
-
-function getNextCycle06Value(currentValue) {
-  const lastDigit = currentValue % 10n;
-  if (lastDigit >= 0n && lastDigit <= 5n) {
-    return currentValue + 1n;
-  }
-  if (lastDigit === 6n) {
-    return currentValue + 4n;
-  }
-  throw new Error("0–6 循環進位制計算失敗：序號個位數必須介於 0~6。");
-}
-
-function getNextCycle16Value(currentValue) {
-  const lastDigit = currentValue % 10n;
-  if (lastDigit >= 1n && lastDigit <= 5n) {
-    return currentValue + 1n;
-  }
-  if (lastDigit === 6n) {
-    return currentValue + 5n;
-  }
-  throw new Error("1–6 循環進位制計算失敗：序號個位數必須介於 1~6。");
-}
-
-function getNextClgValue(currentValue, base) {
-  if (base === "cycle_0_6") {
-    return getNextCycle06Value(currentValue);
-  }
-  if (base === "cycle_1_6") {
-    return getNextCycle16Value(currentValue);
-  }
-  return currentValue + 1n;
-}
-
-// 【用途】Cubepilot：依手動輸入組合前綴/流水號/後綴，支援 10/16/0-6/1-6循環進位制遞增
-function buildClgSerialList(inputs) {
-  const prefix = String(inputs?.prefix ?? "");
-  const startSerial = String(inputs?.startSerial ?? "").trim();
-  const suffix = String(inputs?.suffix ?? "");
-  const base = normalizeClgBase(inputs?.base);
-  const count = Number(inputs?.count);
-
-  if (!startSerial) {
-    throw new Error("請輸入起始流水號。");
-  }
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new Error("請輸入正確的生成數量。");
-  }
-
-  const startValue = toBigIntByBase(startSerial, base);
-  const serialWidth = startSerial.length;
-  const serials = [];
-  let current = startValue;
-
-  for (let index = 0; index < count; index += 1) {
-    const core = formatByBase(current, base).padStart(serialWidth, "0");
-    serials.push(`${prefix}${core}${suffix}`);
-    current = getNextClgValue(current, base);
-  }
-
-  return serials;
-}
 
 function normalizeClgSearchText(value) {
   return String(value ?? "").toLowerCase();
@@ -916,7 +1176,7 @@ function findClgRowsByModel(rows, keyword) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return [];
   }
-  const modelKey = resolveColumnKey(rows[0], "MODEL");
+  const modelKey = resolveCustomerColumnKey("clg", rows[0], "MODEL");
   if (!modelKey) {
     return [];
   }
@@ -925,7 +1185,7 @@ function findClgRowsByModel(rows, keyword) {
 }
 
 function getClgModelValue(row) {
-  return String(row?.[resolveColumnKey(row, "MODEL") || CONFIG.COLUMNS.MODEL] ?? "").trim();
+  return getRowValueByCustomerColumnCode("clg", row, "MODEL");
 }
 
 function normalizeHmgSearchText(value) {
@@ -941,14 +1201,14 @@ function getHmgSearchKeyword(value) {
 }
 
 function getHmgModelValue(row) {
-  return String(row?.[resolveColumnKey(row, "MODEL") || CONFIG.COLUMNS.MODEL] ?? "").trim();
+  return getRowValueByCustomerColumnCode("hmg", row, "MODEL");
 }
 
 function findHmgRowsByModel(rows, keyword) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return [];
   }
-  const modelKey = resolveColumnKey(rows[0], "MODEL");
+  const modelKey = resolveCustomerColumnKey("hmg", rows[0], "MODEL");
   if (!modelKey) {
     return [];
   }
@@ -1138,7 +1398,7 @@ async function renderClgSelectedRow(selectedRow, query, matchCount) {
   state.currentRow = selectedRow;
   const model = getClgModelValue(selectedRow);
   state.currentQuery = model;
-  const plannedSerialPreview = buildClgPlannedSerialPreview(getClgInputValues());
+  const plannedSerialPreview = buildClgPlannedSerialPreview(getClgInputValues(ui), getSafeErrorMessage);
 
   const historySnapshot = await loadHistorySnapshot("clg");
   const generationHistory = filterGenerationRecords(historySnapshot.records, model);
@@ -1216,54 +1476,180 @@ function onClgSerialSettingsChange() {
   refreshClgPlannedSerialPreview();
 }
 
-function buildClgPlannedSerialPreview(inputs) {
-  const prefix = String(inputs?.prefix ?? "");
-  const startSerial = String(inputs?.startSerial ?? "").trim();
-  const suffix = String(inputs?.suffix ?? "");
-  const base = normalizeClgBase(inputs?.base);
-  const count = Number(inputs?.countText);
+const HOME_CUSTOMER_THEME_CLASS_MAP = {
+  yingbang: "home-theme-yingbang",
+  lunfei: "home-theme-lunfei",
+  bng: "home-theme-bng",
+  chg: "home-theme-chg"
+};
+const HOME_CUSTOMER_THEME_CLASSES = Object.values(HOME_CUSTOMER_THEME_CLASS_MAP);
 
-  try {
-    if (!startSerial) {
-      throw new Error("請輸入起始流水號，才能預覽序號。");
+// 【用途】首頁命中結果：套用/清除客戶主題色（狀態列 + 預覽窗格）
+function setHomeCustomerTheme(customerKey) {
+  const themeClass = HOME_CUSTOMER_THEME_CLASS_MAP[customerKey] || "";
+  const targets = [ui.homeShell, ui.homePreviewPanel];
+  targets.forEach((element) => {
+    if (!element) {
+      return;
     }
-    if (!Number.isInteger(count) || count <= 0) {
-      throw new Error("請輸入正確的生成數量，才能預覽序號。");
+    HOME_CUSTOMER_THEME_CLASSES.forEach((name) => element.classList.remove(name));
+    if (themeClass) {
+      element.classList.add(themeClass);
     }
-    const startValue = toBigIntByBase(startSerial, base);
-    const serialWidth = startSerial.length;
-    const firstTen = [];
-    const lastTen = [];
-    let current = startValue;
+  });
+}
 
-    for (let index = 0; index < count; index += 1) {
-      const core = formatByBase(current, base).padStart(serialWidth, "0");
-      const serialText = `${prefix}${core}${suffix}`;
-      if (firstTen.length < 10) {
-        firstTen.push(serialText);
-      }
-      if (lastTen.length === 10) {
-        lastTen.shift();
-      }
-      lastTen.push(serialText);
-      current = getNextClgValue(current, base);
-    }
-
-    return {
-      total: count,
-      firstTen,
-      lastTen,
-      error: ""
-    };
-  } catch (error) {
-    return {
-      total: 0,
-      firstTen: [],
-      lastTen: [],
-      error: getSafeErrorMessage(error)
-    };
+// 【用途】首頁查詢分流：把關鍵字送到指定客戶既有查詢流程
+async function runHomeSearchByCustomer(customerKey, query) {
+  if (customerKey === "yingbang") {
+    switchCustomerTab("yingbang");
+    ui.searchInput.value = query;
+    await performSearch();
+    return;
+  }
+  if (customerKey === "lunfei") {
+    switchCustomerTab("lunfei");
+    ui.lunfeiSearchInput.value = query;
+    await performLunfeiSearch();
+    return;
+  }
+  if (customerKey === "bng") {
+    switchCustomerTab("bng");
+    ui.bngSearchInput.value = query;
+    await performBngSearch();
+    return;
+  }
+  if (customerKey === "chg") {
+    switchCustomerTab("chg");
+    ui.chgSearchInput.value = query;
+    await performChgSearch();
+    return;
+  }
+  if (customerKey === "hmg") {
+    switchCustomerTab("hmg");
+    ui.hmgSearchInput.value = query;
+    await performHmgSearch();
+    return;
+  }
+  if (customerKey === "clg") {
+    switchCustomerTab("clg");
+    ui.clgSearchInput.value = query;
+    await performClgSearch();
   }
 }
+
+// 【用途】取得客戶預覽來源面板
+function getPreviewPanelByCustomer(customerKey) {
+  const panelMap = {
+    yingbang: ui.previewPanel,
+    lunfei: ui.lunfeiPreviewPanel,
+    bng: ui.bngPreviewPanel,
+    chg: ui.chgPreviewPanel,
+    hmg: ui.hmgPreviewPanel,
+    clg: ui.clgPreviewPanel
+  };
+  return panelMap[customerKey] || null;
+}
+
+// 【用途】取得首頁預覽中清空歷史按鈕的對應事件
+function getHomePreviewClearHistoryBinding(customerKey) {
+  const clearMap = {
+    yingbang: { selector: "#btn-clear-history", handler: onClearHistoryClick },
+    lunfei: { selector: "#btn-clear-history-lunfei", handler: onLunfeiClearHistoryClick },
+    bng: { selector: "#btn-clear-history-bng", handler: onBngClearHistoryClick },
+    chg: { selector: "#btn-clear-history-chg", handler: onChgClearHistoryClick },
+    hmg: { selector: "#btn-clear-history-hmg", handler: onHmgClearHistoryClick },
+    clg: { selector: "#btn-clear-history-clg", handler: onClgClearHistoryClick }
+  };
+  return clearMap[customerKey] || null;
+}
+
+// 【用途】將底層客戶預覽窗格內容同步到首頁預覽窗格
+function syncHomePreviewPanel(customerKey) {
+  if (!ui.homePreviewPanel) {
+    return;
+  }
+  const sourcePanel = getPreviewPanelByCustomer(customerKey);
+  ui.homePreviewPanel.innerHTML = sourcePanel?.innerHTML || "<p>無可顯示的預覽資料。</p>";
+  bindPreviewTabsIn(ui.homePreviewPanel);
+  bindSheetCopyCellsIn(ui.homePreviewPanel, onCopyError);
+  bindCopyButtonsIn(ui.homePreviewPanel, onCopyError);
+  bindPrintedToggleIn(ui.homePreviewPanel);
+  const clearBinding = getHomePreviewClearHistoryBinding(customerKey);
+  if (clearBinding) {
+    bindClearHistoryButtonIn(ui.homePreviewPanel, clearBinding.selector, clearBinding.handler);
+  }
+  bindCustomTabActionsIn(ui.homePreviewPanel, {
+    onAdd: onAddPreviewCustomTab,
+    onRemove: onRemovePreviewCustomTab,
+    onEdit: onEditPreviewCustomTab
+  });
+}
+
+async function onHomeResetHistoryByCustomer(customerKey, historyKey) {
+  const key = String(customerKey ?? "").trim();
+  if (key === "yingbang") {
+    await onResetSerialHistoryKey(historyKey);
+    return;
+  }
+  if (key === "lunfei") {
+    await onLunfeiResetSerialHistoryKey(historyKey);
+    return;
+  }
+  if (key === "bng") {
+    await onBngResetSerialHistoryKey(historyKey);
+    return;
+  }
+  if (key === "chg") {
+    await onChgResetSerialHistoryKey(historyKey);
+    return;
+  }
+  if (key === "hmg") {
+    await onHmgResetSerialHistoryKey(historyKey);
+    return;
+  }
+  if (key === "clg") {
+    await onClgResetSerialHistoryKey(historyKey);
+  }
+}
+
+const homeController = createHomeController({
+  ui,
+  state,
+  homeRuntime,
+  escapeHtml,
+  normalizeText,
+  getSafeErrorMessage,
+  setHomeLoading,
+  setHomeExportEnabled,
+  setHomeBngPrintEnabled,
+  setHomeCustomerTheme,
+  runHomeSearchByCustomer,
+  syncHomePreviewPanel,
+  loadHistorySnapshot,
+  renderSerialHistoryTableIn,
+  bindHistoryResetButtonsIn,
+  onHomeResetHistoryByCustomer,
+  switchCustomerTab,
+  onExportClick,
+  onBngPrintReceiptClick,
+  findHmgRowsByModel,
+  findClgRowsByModel,
+  getHmgModelValue,
+  getClgModelValue,
+  getRowValueByCustomerColumnCode,
+  updateHomeStatus
+});
+
+const {
+  performHomeSearch,
+  onHomeSearchTypeChange,
+  onHomePreviewPanelClick,
+  openHomeHistoryPanel,
+  onHomeExportClick,
+  onHomeBngPrintClick,
+  syncHomeSearchModeUi
+} = homeController;
 
 function updateClgExportEnabledBySettings() {
   if (!ui.clgExportBtn) {
@@ -1273,31 +1659,33 @@ function updateClgExportEnabledBySettings() {
     ui.clgExportBtn.disabled = true;
     return;
   }
-  const plannedSerialPreview = buildClgPlannedSerialPreview(getClgInputValues());
+  const plannedSerialPreview = buildClgPlannedSerialPreview(getClgInputValues(ui), getSafeErrorMessage);
   ui.clgExportBtn.disabled = Boolean(plannedSerialPreview.error);
 }
 
-function ensureClgManualPreviewRoot() {
-  if (!ui.clgPreviewPanel) {
-    return;
-  }
-  const existingRoot = ui.clgPreviewPanel.querySelector("#clg-planned-preview-root");
-  if (existingRoot) {
-    return;
-  }
-  ui.clgPreviewPanel.innerHTML = `
-    <h2>Cubepilot 預覽窗格</h2>
-    <p>未上傳 Cubepilot Excel 也可先使用序號生成設定。</p>
-    <div id="clg-planned-preview-root"></div>
-  `;
+function refreshClgPlannedSerialPreview() {
+  const plannedSerialPreview = buildClgPlannedSerialPreview(getClgInputValues(ui), getSafeErrorMessage);
+  updateClgPlannedSerialPreviewIn(ui, plannedSerialPreview);
 }
 
-function refreshClgPlannedSerialPreview() {
-  if (!state.currentRow) {
-    ensureClgManualPreviewRoot();
+// 【用途】序號生成設定：複製整串序號為純文字（每行一筆）
+async function onClgCopySerialTextClick(event) {
+  const button = event.target.closest("#btn-copy-clg-serial-text");
+  if (!button) {
+    return;
   }
-  const plannedSerialPreview = buildClgPlannedSerialPreview(getClgInputValues());
-  updateClgPlannedSerialPreviewIn(ui, plannedSerialPreview);
+  try {
+    const serialList = buildClgSerialList(getClgInputValues(ui));
+    if (!Array.isArray(serialList) || serialList.length === 0) {
+      updateHomeStatus("目前無可複製的序號，請先完成序號設定。", true);
+      return;
+    }
+    const plainText = serialList.join("\n");
+    await copyTextToClipboard(plainText);
+    updateHomeStatus(`已複製整串序號（共 ${serialList.length} 筆）。`, false, false, true);
+  } catch (error) {
+    updateHomeStatus(`複製失敗：${getSafeErrorMessage(error)}`, true);
+  }
 }
 
 function getClgExportFileName() {
@@ -1527,11 +1915,13 @@ async function refreshSearchPreview(query, matchCount) {
     previewSN: buildYingbangPreviewSN(purchaseOrder, workOrder, historySnapshot.entries),
     datecode: getDatecode(),
     resolvedQty,
-    workOrderHistory: filterGenerationRecords(historySnapshot.records, workOrder)
+    workOrderHistory: filterGenerationRecords(historySnapshot.records, workOrder),
+    printNotice: buildPrintNotice("yingbang", "工單", query)
   });
   bindPreviewTabs(ui);
   bindCopyButtons(ui, onCopyError);
   bindSheetCopyCells(ui, onCopyError);
+  bindPrintedToggleIn(ui.previewPanel);
   bindClearHistoryButton(ui, onClearHistoryClick);
   bindCustomTabActionsIn(ui.previewPanel, {
     onAdd: onAddPreviewCustomTab,
@@ -1616,7 +2006,11 @@ function onBngPrintReceiptClick() {
   }
 
   try {
-    const payload = buildBngReceiptPrintPayload(state.currentRow);
+    const payload = buildBngReceiptPrintPayload({
+      row: state.currentRow,
+      getColumnValue: getBngColumnValue,
+      normalizeRangeText
+    });
     mountBngReceiptPrintView(payload);
     window.print();
     updateBngStatus(`已開啟列印：MO ${payload.mo} 收據明細。`);
@@ -1750,11 +2144,13 @@ async function performLunfeiSearch() {
       previewSN: getLunfeiPreviewSN(historySnapshot.entries),
       rowData: state.lunfeiRowData,
       generationHistory,
-      resolvedQty
+      resolvedQty,
+      printNotice: buildPrintNotice("lunfei", "MO", query)
     });
     bindPreviewTabsIn(ui.lunfeiPreviewPanel);
     bindSheetCopyCellsIn(ui.lunfeiPreviewPanel, onCopyError);
     bindCopyButtonsIn(ui.lunfeiPreviewPanel, onCopyError);
+    bindPrintedToggleIn(ui.lunfeiPreviewPanel);
     bindClearHistoryButtonIn(ui.lunfeiPreviewPanel, "#btn-clear-history-lunfei", onLunfeiClearHistoryClick);
     bindCustomTabActionsIn(ui.lunfeiPreviewPanel, {
       onAdd: onAddPreviewCustomTab,
@@ -1819,11 +2215,13 @@ async function performBngSearch() {
       resolveColumnKey,
       rowData: state.bngRowData,
       generationHistory,
-      normalizedRanges
+      normalizedRanges,
+      printNotice: buildPrintNotice("bng", "MO", query)
     });
     bindPreviewTabsIn(ui.bngPreviewPanel);
     bindSheetCopyCellsIn(ui.bngPreviewPanel, onCopyError);
     bindCopyButtonsIn(ui.bngPreviewPanel, onCopyError);
+    bindPrintedToggleIn(ui.bngPreviewPanel);
     bindClearHistoryButtonIn(ui.bngPreviewPanel, "#btn-clear-history-bng", onBngClearHistoryClick);
     bindCustomTabActionsIn(ui.bngPreviewPanel, {
       onAdd: onAddPreviewCustomTab,
@@ -1875,11 +2273,13 @@ async function performChgSearch() {
       matchCount: matchedRows.length,
       resolveColumnKey,
       rowData: state.chgRowData,
-      generationHistory
+      generationHistory,
+      printNotice: buildPrintNotice("chg", "工單", workOrder)
     });
     bindPreviewTabsIn(ui.chgPreviewPanel);
     bindSheetCopyCellsIn(ui.chgPreviewPanel, onCopyError);
     bindCopyButtonsIn(ui.chgPreviewPanel, onCopyError);
+    bindPrintedToggleIn(ui.chgPreviewPanel);
     bindClearHistoryButtonIn(ui.chgPreviewPanel, "#btn-clear-history-chg", onChgClearHistoryClick);
     bindCustomTabActionsIn(ui.chgPreviewPanel, {
       onAdd: onAddPreviewCustomTab,
@@ -2784,7 +3184,7 @@ async function onExportClick() {
         : "";
       const modelFromInput = String(ui.clgSearchInput?.value ?? "").trim();
       const model = modelFromRow || modelFromInput || "manual";
-      const inputs = getClgInputValues();
+      const inputs = getClgInputValues(ui);
       const count = Number(inputs.countText);
       const serials = buildClgSerialList({
         ...inputs,
@@ -2872,6 +3272,42 @@ async function onExportClick() {
 }
 
 function initEvents() {
+  if (ui.homeQueryBtn) {
+    ui.homeQueryBtn.addEventListener("click", performHomeSearch);
+  }
+  if (ui.homeHistoryBtn) {
+    ui.homeHistoryBtn.addEventListener("click", openHomeHistoryPanel);
+  }
+  if (ui.homeExportBtn) {
+    ui.homeExportBtn.addEventListener("click", onHomeExportClick);
+  }
+  if (ui.homeBngPrintBtn) {
+    ui.homeBngPrintBtn.addEventListener("click", onHomeBngPrintClick);
+  }
+  if (ui.homePrintHistoryBtn) {
+    ui.homePrintHistoryBtn.addEventListener("click", toggleHomePrintHistoryPanel);
+  }
+  if (ui.homeSearchInput) {
+    ui.homeSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        performHomeSearch();
+      }
+    });
+  }
+  if (ui.homePreviewPanel) {
+    ui.homePreviewPanel.addEventListener("click", onHomePreviewPanelClick);
+  }
+  if (ui.homePrintHistoryPanel) {
+    ui.homePrintHistoryPanel.addEventListener("click", onHomePrintHistoryPanelClick);
+    ui.homePrintHistoryPanel.addEventListener("change", onHomePrintHistoryPanelChange);
+  }
+  if (ui.clgSettingsPlannedPreviewRoot) {
+    ui.clgSettingsPlannedPreviewRoot.addEventListener("click", onClgCopySerialTextClick);
+  }
+  if (ui.homeSearchTypeSelect) {
+    ui.homeSearchTypeSelect.addEventListener("change", onHomeSearchTypeChange);
+  }
   ui.yingbangTab.addEventListener("click", () => switchCustomerTab("yingbang"));
   ui.lunfeiTab.addEventListener("click", () => switchCustomerTab("lunfei"));
   ui.bngTab.addEventListener("click", () => switchCustomerTab("bng"));
@@ -2982,6 +3418,9 @@ function initEvents() {
   ui.clgCountInput.addEventListener("input", onClgSerialSettingsChange);
   ui.clgSuffixInput.addEventListener("input", onClgSerialSettingsChange);
   ui.clgBaseSelect.addEventListener("change", onClgSerialSettingsChange);
+  if (ui.clgSettingsToggleBtn) {
+    ui.clgSettingsToggleBtn.addEventListener("click", toggleClgSettingsVisibility);
+  }
   ui.fileInput.addEventListener("change", onFileSelected);
   ui.lunfeiFileInput.addEventListener("change", onLunfeiFileSelected);
   ui.bngFileInput.addEventListener("change", onBngFileSelected);
@@ -3042,11 +3481,23 @@ async function autoRestoreExcelData() {
 async function main() {
   updateStatus(ui, "骨架初始化完成。");
   hydrateEditableCustomerCustomTabs();
+  renderHomePrintNoticeBoard();
   updateTabUi();
   applyCustomerProfileUi();
   initEvents();
+  setHomeCustomerTheme("");
+  syncHomeSearchModeUi();
+  setClgSettingsVisibility(false);
+  refreshClgPlannedSerialPreview();
   setSearchEnabled(false);
   setExportEnabled(false);
+  setHomeExportEnabled(false);
+  setHomeBngPrintEnabled(false);
+  try {
+    await loadPrintNoticeBoard();
+  } catch (error) {
+    updateHomeStatus(`已列印公告載入失敗：${getSafeErrorMessage(error)}`, true);
+  }
   await autoRestoreExcelData();
 }
 

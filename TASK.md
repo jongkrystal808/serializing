@@ -1,8 +1,8 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.13
-**Last Updated:** 2026-03-18
+**Version:** 0.3.36
+**Last Updated:** 2026-05-11
 
 ---
 
@@ -41,6 +41,102 @@
 ---
 
 ## ✅ Done
+
+### ✅ T67 — KOYA 預覽窗格改版為檢查清單式 Copy Panel（完成：2026-05-11）
+**Module:** KOYA / UI Preview / Clipboard UX
+**Notes:** KOYA 預覽分區（Label / Box Label）改為與超恩一致的檢查清單式 Copy Panel：單列結構為「標籤 + 值 + 右側複製按鈕」，每區提供「全部複製」，並支援單列/整區 `已複製 ✓` 回饋。僅調整呈現與複製交互，不影響既有欄位與匯出邏輯。
+
+### ✅ T66 — 超恩預覽窗格改版為檢查清單式 Copy Panel（完成：2026-05-11）
+**Module:** BNG / UI Preview / Clipboard UX
+**Notes:** 超恩預覽分區改為檢查清單式 UI：單列結構為「標籤 + 值 + 右側 icon 複製」，各分區新增「全部複製」。序號/MAC/UUID/FW/BIOS 值改為等寬字體，並對 `生產數量 / MAC數量 / MAC板子用量數量` 顯示狀態提示。複製回饋改為 `已複製 ✓`，支援單列與整區複製。
+
+### ✅ T65 — KOYA 預覽新增工單月份欄位（完成：2026-05-11）
+**Module:** KOYA / UI Preview / Excel Parse Alias
+**Notes:** KOYA（`chg`）新增 `WORK_ORDER_MONTH` 欄位映射，支援 `工單月份/月份/工單月`。預覽窗格副標題改為動態組裝，當工單月份有值時顯示在 `工單/PO/批量` 同列；空值則隱藏。
+
+### ✅ T64 — 超恩預覽新增來源（拆分標記）顯示（完成：2026-05-11）
+**Module:** BNG / UI Preview / Excel Parse Alias
+**Notes:** 超恩（`bng`）新增 `SOURCE` 欄位映射，支援 `來源/拆分標記/拆分註記`。預覽窗格標題右側新增 `來源：...` 標示，僅在欄位有值時顯示，空值不顯示。
+
+### ✅ T63 — app.js 拆檔第二階段（首頁聚合流程模組化）（完成：2026-05-01）
+**Module:** Frontend / Refactor / Modularization
+**Notes:** 新增 `homeController.js` 抽離首頁聚合搜尋、首頁歷史整合與首頁匯出/收據分流；新增 `customerColumns.js` 提供客戶欄位解析共用函式。`app.js` 改為依賴注入與事件掛接，保留既有流程行為。
+
+### ✅ T62 — ui.js 拆分（預覽渲染模組化）（完成：2026-05-01）
+**Module:** Frontend / UI / Modularization
+**Notes:** 將 `ui.js` 中各客戶 `render*Search*` 與預覽共用 helper 抽離到 `uiPreviewRenderers.js`，`ui.js` 保留狀態/事件綁定與聚合 export，`app.js` 介面維持相容。
+
+### ✅ T61 — ui.js 拆分（Clipboard / History）（完成：2026-05-01）
+**Module:** Frontend / UI / Modularization
+**Notes:** 將 `ui.js` 中剪貼簿綁定與歷史表格邏輯拆分到 `uiClipboard.js`、`uiHistory.js`；`ui.js` 保留聚合 export，`app.js` 不需調整呼叫介面。
+
+### ✅ T60 — app.js 拆檔第一階段（完成：2026-05-01）
+**Module:** Frontend / Refactor / Modularization
+**Notes:** 抽離 `serialSettings` 與 `bngReceipt` 模組，將序號設定運算與收據模板由 `app.js` 移出，保留既有流程與行為。
+
+### ✅ T59 — 無引用工具函式清理（完成：2026-05-01）
+**Module:** Frontend / Utils / Cleanup
+**Notes:** 移除 `utils.js` 中已無任何呼叫點的 `parseArrow()`，保留現行流程使用的工具函式集合。
+
+### ✅ T58 — UI 無引用匯出函式清理（完成：2026-05-01）
+**Module:** Frontend / UI / Cleanup
+**Notes:** 移除 `ui.js` 中無任何呼叫點的 `renderSerialHistoryTable()` 包裝函式，統一使用 `renderSerialHistoryTableIn()`，降低 API 表面積。
+
+### ✅ T57 — 前端冗餘模組清理（完成：2026-05-01）
+**Module:** Frontend / Refactor / Cleanup
+**Notes:** 對照 `architecture.md` 清除未使用的舊相容模組（`sourceBinding/storage/customerEngine`），並收斂 `excel.js` 只保留現行流程所需函式，降低維護噪音。
+
+### ✅ T56 — 序號整串複製數量判定修正（完成：2026-05-01）
+**Module:** UI / Serial Settings / Clipboard
+**Notes:** 修正「複製整串序號（純文字）」誤判生成數量無效的問題。序號生成函式改為兼容 `count` 與 `countText` 來源欄位。
+
+### ✅ T55 — 序號設定新增整串純文字複製（完成：2026-05-01）
+**Module:** UI / Serial Settings / Clipboard
+**Notes:** 在序號生成設定預覽區新增「複製整串序號（純文字）」按鈕，點擊後依目前設定生成全部序號並以每行一筆格式複製到剪貼簿。
+
+### ✅ T54 — 首頁命中狀態字樣放大（完成：2026-05-01）
+**Module:** UI / Home Status
+**Notes:** 首頁「已命中 ...」訊息新增 success 樣式，字級與字重提升，強化查詢成功回饋可讀性。
+
+### ✅ T53 — 首頁機種多筆命中候選清單（完成：2026-05-01）
+**Module:** UI / Search / Home Preview
+**Notes:** 修正首頁機種模式在多筆命中時無法選擇的問題。首頁預覽窗格直接顯示可點選候選機種，點選後回填搜尋欄並重跑查詢。
+
+### ✅ T52 — 首頁機種模式聚合搜尋修正（完成：2026-05-01）
+**Module:** UI / Search / Home Routing
+**Notes:** 修正首頁「機種（Model）」模式查不到資料問題。`hmg/clg` 的 `MODEL` 比對改為客戶獨立欄位解析，不再依賴 active customer 的 `CONFIG.COLUMNS`。
+
+### ✅ T51 — 序號生成設定通用化與預覽內嵌（完成：2026-05-01）
+**Module:** UI / Serial Settings / Preview
+**Notes:** 首頁「序號生成設定」移除 `Cubepilot` 專用字樣；「預估生成序號預覽」從客戶預覽窗格移到序號設定卡片內，讓設定與預覽同區操作。
+
+### ✅ T50 — 首頁命中客戶色彩區分（完成：2026-05-01）
+**Module:** UI / Home Result Theme
+**Notes:** 首頁查詢命中後新增客戶主題色：營邦深藍、倫飛綠、超恩紫、KOYA橘。主題色套用到首頁狀態列文字與預覽窗格邊框，未命中或切換搜尋模式時回到中性樣式。
+
+### ✅ T49 — 首頁搜尋新增類型篩選（工單/MO vs 機種）（完成：2026-05-01）
+**Module:** UI / Search / Home Routing
+**Notes:** 首頁搜尋區新增「工單/MO、機種（Model）」篩選下拉。聚合搜尋改為依模式分流：工單/MO 僅查 `yingbang/lunfei/bng/chg`，機種僅查 `hmg/clg`。同步調整 placeholder 與提示文案，避免混搜造成誤命中。
+
+### ✅ T48 — 首頁聚合搜尋跨客戶命中修正（完成：2026-05-01）
+**Module:** UI / Search / Home Routing
+**Notes:** 修正首頁聚合搜尋在跨客戶場景下無法命中工單/MO 的問題。原因為聚合比對誤用 active-customer 的 `CONFIG.COLUMNS`；現已改為依目標客戶 profile（`columns/columnAliases`）做欄位解析後比對，確保全客戶集中搜尋可正常命中並分流。
+
+### ✅ T47 — 首頁新增 BNG 收據按鈕（條件啟用）（完成：2026-05-01）
+**Module:** UI / BNG Print / Home Routing
+**Notes:** 首頁「生成序號 & 匯出」旁新增「產生收據」按鈕，沿用既有超恩收據列印流程。按鈕預設禁用，僅在首頁搜尋命中 BNG 工單且可列印狀態成立時啟用。
+
+### ✅ T46 — 首頁全客戶聚合搜尋（含 clg 機種）（完成：2026-05-01）
+**Module:** UI / Search / Routing
+**Notes:** 首頁搜尋升級為全客戶聚合：可共同搜尋 `yingbang/lunfei/bng/chg` 工單或 MO，並包含 `hmg` 與 `clg` 機種搜尋。命中後自動分流到對應客戶流程，將預覽同步回首頁；首頁歷史與匯出也改為跟隨目前命中客戶。
+
+### ✅ T45 — 首頁收斂為單一操作區（完成：2026-05-01）
+**Module:** UI / Search / HMG / Yingbang
+**Notes:** 首頁改為單一操作模式，只保留「查看歷史 / 搜尋 / 匯出」與「序號生成設定（Cubepilot）入口」。搜尋欄支援工單與赫星機種共用查詢，命中後顯示對應預覽窗格；保留原有營邦與赫星匯出流程。
+
+### ✅ T44 — 首頁查詢操作列精簡改版（完成：2026-05-01）
+**Module:** UI / Cubepilot / HMG
+**Notes:** 查詢區改為首頁式單列操作：左側為「查看歷史」、中間為搜尋欄（含搜尋按鈕）、右側為匯出；保留原本 Enter 與按鈕查詢行為。Cubepilot 新增「序號生成設定（Cubepilot）」入口，點擊後可展開/收合設定卡片，位置固定在搜尋欄下方，維持既有序號生成邏輯。
 
 ### ✅ T43 — 實作 Excel 上傳持久化與自動恢復（完成：2026-04-24）
 **Module:** Backend / Frontend / Excel
@@ -232,11 +328,33 @@
 | Phase 14（Hotfix：Cubepilot 1–6 新進制） | 1 | 1 | 0 | 0 |
 | Phase 15（Hotfix：Cubepilot 無 Excel 直出） | 1 | 1 | 0 | 0 |
 | Phase 16（新增赫星 HMG） | 1 | 1 | 0 | 0 |
-| **Total** | **41** | **40** | **0** | **1** |
+| Phase 17（首頁操作列精簡改版） | 1 | 1 | 0 | 0 |
+| Phase 18（首頁單一操作區） | 1 | 1 | 0 | 0 |
+| Phase 19（首頁全客戶聚合搜尋） | 1 | 1 | 0 | 0 |
+| Phase 20（首頁 BNG 收據入口） | 1 | 1 | 0 | 0 |
+| Phase 21（首頁聚合搜尋跨客戶修正） | 1 | 1 | 0 | 0 |
+| Phase 22（首頁搜尋類型篩選） | 1 | 1 | 0 | 0 |
+| Phase 23（首頁命中客戶色彩區分） | 1 | 1 | 0 | 0 |
+| Phase 24（序號設定入口與預覽收斂） | 1 | 1 | 0 | 0 |
+| Phase 25（首頁機種模式聚合修正） | 1 | 1 | 0 | 0 |
+| Phase 26（首頁機種多筆命中候選） | 1 | 1 | 0 | 0 |
+| Phase 27（首頁命中訊息視覺強化） | 1 | 1 | 0 | 0 |
+| Phase 28（序號設定整串複製） | 1 | 1 | 0 | 0 |
+| Phase 29（序號整串複製判定修正） | 1 | 1 | 0 | 0 |
+| Phase 30（前端冗餘模組清理） | 1 | 1 | 0 | 0 |
+| Phase 31（UI 無引用匯出清理） | 1 | 1 | 0 | 0 |
+| Phase 32（無引用工具函式清理） | 1 | 1 | 0 | 0 |
+| Phase 33（app.js 拆檔第一階段） | 1 | 1 | 0 | 0 |
+| Phase 34（ui.js 拆分） | 1 | 1 | 0 | 0 |
+| Phase 35（BNG 來源欄位預覽） | 1 | 1 | 0 | 0 |
+| Phase 36（KOYA 工單月份預覽） | 1 | 1 | 0 | 0 |
+| Phase 37（BNG Copy Panel UI 改版） | 1 | 1 | 0 | 0 |
+| Phase 38（KOYA Copy Panel UI 改版） | 1 | 1 | 0 | 0 |
+| **Total** | **63** | **62** | **0** | **1** |
 
 ---
 
-## 🗓️ Suggested Build Order（Phase 6 + Phase 16）
+## 🗓️ Suggested Build Order（Phase 6）
 
 ```
 T27 全流程整合測試
@@ -257,4 +375,4 @@ T27 全流程整合測試
 
 ---
 
-*Last updated: 2026-03-18*
+*Last updated: 2026-05-11*

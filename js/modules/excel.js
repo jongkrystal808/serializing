@@ -1,56 +1,4 @@
-import { CONFIG, getActiveCustomerProfile } from "../config.js";
-import { HistoryModule } from "./storage.js";
-import {
-  applyParseRules,
-  buildSerialByRule,
-  buildWorkbookByStrategy
-} from "./customerEngine.js";
 import { normalizeRangeText } from "./utils.js";
-
-const BARTENDER_COMPAT_MODE = true;
-
-export function verifyDependencies() {
-  return typeof window.XLSX !== "undefined" && typeof window.saveAs !== "undefined";
-}
-
-export function extractSheetData(workbook) {
-  const worksheet = workbook.Sheets[CONFIG.SHEET_NAME];
-  if (!worksheet) {
-    throw new Error(`找不到工作表「${CONFIG.SHEET_NAME}」`);
-  }
-
-  const rawRows = window.XLSX.utils.sheet_to_json(worksheet, {
-    defval: "",
-    raw: false
-  });
-
-  return rawRows.map((row) => {
-    const parsedRow = {};
-    const profile = getActiveCustomerProfile();
-    const parseRules = profile?.parseRules || ["arrow"];
-    Object.keys(row).forEach((key) => {
-      parsedRow[String(key).trim()] = applyParseRules(row[key], parseRules);
-    });
-    return parsedRow;
-  });
-}
-
-export function loadExcel(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const arrayBuffer = event.target.result;
-        const workbook = window.XLSX.read(arrayBuffer, { type: "array" });
-        resolve(extractSheetData(workbook));
-      } catch (error) {
-        reject(error);
-      }
-    };
-    reader.onerror = () => reject(new Error("檔案讀取失敗，請重新選擇 Excel 檔案。"));
-    reader.readAsArrayBuffer(file);
-  });
-}
 
 function getISOWeek(date) {
   const target = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
@@ -70,10 +18,15 @@ export function getLunfeiWeekKey() {
 }
 
 export function buildLunfeiSN(weekNum2digit, serialNumber) {
-  return buildSerialByRule(
-    { type: "lunfei_weekly" },
-    { weekNum2digit, serialNumber }
-  );
+  const serial = Number(serialNumber);
+  if (!Number.isInteger(serial) || serial <= 0) {
+    return "";
+  }
+  const week = String(weekNum2digit ?? "").trim().padStart(2, "0").slice(-2);
+  if (!week) {
+    return "";
+  }
+  return `106${week}62${String(serial).padStart(5, "0")}`;
 }
 
 export function getDatecode() {
@@ -81,142 +34,6 @@ export function getDatecode() {
   const yy = String(now.getFullYear()).slice(-2);
   const ww = String(getISOWeek(now)).padStart(2, "0");
   return `D${yy}${ww}`;
-}
-
-export function buildSN(purchaseOrder, serialNumber) {
-  const profile = getActiveCustomerProfile();
-  const serialRule = profile?.serialRule || { type: "po_plus_fixed", fixed: "1", padLength: 4 };
-  return buildSerialByRule(serialRule, {
-    purchaseOrder,
-    serialNumber
-  });
-}
-
-export function buildPreviewSN(workOrder, purchaseOrder) {
-  const key = String(purchaseOrder ?? "").trim();
-  if (!key) {
-    return "";
-  }
-  const nextSerial = HistoryModule.getLastSerial(key) + 1;
-  return buildSN(purchaseOrder, nextSerial);
-}
-
-export function generateSNList(args) {
-  const qtyNum = Number(args?.qty);
-  const purchaseOrder = String(args?.purchaseOrder ?? "").trim();
-  const pn = String(args?.pn ?? "").trim();
-  if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
-    throw new Error("Q'ty 必須為正整數。");
-  }
-  if (!purchaseOrder) {
-    throw new Error("缺少採單號碼，無法生成序號。");
-  }
-
-  const historyKey = purchaseOrder;
-  const lastSerial = HistoryModule.getLastSerial(historyKey);
-  const list = [];
-  const datecode = getDatecode();
-
-  for (let i = 1; i <= qtyNum; i += 1) {
-    list.push({
-      SN: buildSN(purchaseOrder, lastSerial + i),
-      Datecode: datecode,
-      PN: pn,
-      QTY: qtyNum
-    });
-  }
-
-  HistoryModule.updateHistory(historyKey, qtyNum);
-  return list;
-}
-
-export function generateLunfeiSNList(mo, qty) {
-  const moValue = String(mo ?? "").trim();
-  const qtyNum = Number(qty);
-  if (!moValue) {
-    throw new Error("缺少 MO，無法生成倫飛序號。");
-  }
-  if (!Number.isInteger(qtyNum) || qtyNum <= 0) {
-    throw new Error("Q'ty 必須為正整數。");
-  }
-
-  const weekKey = getLunfeiWeekKey();
-  const weekNum2 = getCurrentWeekNumber2Digits();
-  const lastSerial = HistoryModule.getLastSerial(weekKey);
-  const list = [];
-
-  for (let i = 1; i <= qtyNum; i += 1) {
-    list.push({
-      SN: buildLunfeiSN(weekNum2, lastSerial + i)
-    });
-  }
-
-  HistoryModule.updateHistory(weekKey, qtyNum);
-  return list;
-}
-
-// 【用途】統一匯出檔名：{客戶名}-SN.xlsx
-function buildUnifiedExportFilename() {
-  const label = String(getActiveCustomerProfile()?.label ?? "").trim() || "客戶";
-  const safeLabel = label
-    .replace(/[\\/:*?"<>|]/g, "_")
-    .replace(/\s+/g, "_")
-    .replace(/\.+$/g, "");
-  const extension = BARTENDER_COMPAT_MODE ? "xls" : "xlsx";
-  return `${safeLabel}-SN.${extension}`;
-}
-
-function getExportMimeType() {
-  if (BARTENDER_COMPAT_MODE) {
-    return "application/vnd.ms-excel";
-  }
-  return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-}
-
-function writeWorkbookArray(workbook) {
-  if (BARTENDER_COMPAT_MODE) {
-    return window.XLSX.write(workbook, {
-      bookType: "xls",
-      type: "array",
-      bookSST: true
-    });
-  }
-  return window.XLSX.write(workbook, {
-    bookType: "xlsx",
-    type: "array",
-    bookSST: true
-  });
-}
-
-// 【用途】建立 BarTender 較穩定的 Excel 工作表：全部欄位強制為文字
-function buildCompatibleWorksheet(rows) {
-  const safeRows = Array.isArray(rows)
-    ? rows.map((row) => {
-      if (!Array.isArray(row)) {
-        return [String(row ?? "")];
-      }
-      return row.map((cell) => String(cell ?? ""));
-    })
-    : [];
-  const worksheet = window.XLSX.utils.aoa_to_sheet(safeRows, { cellDates: false });
-  if (!worksheet["!ref"]) {
-    return worksheet;
-  }
-  const range = window.XLSX.utils.decode_range(worksheet["!ref"]);
-  for (let row = range.s.r; row <= range.e.r; row += 1) {
-    for (let col = range.s.c; col <= range.e.c; col += 1) {
-      const cellAddress = window.XLSX.utils.encode_cell({ r: row, c: col });
-      const cell = worksheet[cellAddress];
-      if (!cell) {
-        continue;
-      }
-      cell.t = "s";
-      cell.v = String(cell.v ?? "");
-      delete cell.w;
-      delete cell.z;
-    }
-  }
-  return worksheet;
 }
 
 export function getTodayDateText() {
@@ -260,204 +77,6 @@ function formatBngBoxModel(model) {
     return text;
   }
   return text.slice(0, markerIndex).trim();
-}
-
-export function buildExportFilename(moInput) {
-  return buildUnifiedExportFilename();
-}
-
-export function buildBngExportFilename(workOrderInput) {
-  return buildUnifiedExportFilename();
-}
-
-export function buildChgExportFilename(workOrderInput) {
-  return buildUnifiedExportFilename();
-}
-
-export function exportExcel(snList, moInput) {
-  if (!Array.isArray(snList) || snList.length === 0) {
-    throw new Error("沒有可匯出的序號資料。");
-  }
-
-  const profile = getActiveCustomerProfile();
-  const workbookData = buildWorkbookByStrategy(profile?.exportStrategy, {
-    snList,
-    columns: profile?.exportColumns
-  });
-  const workbook = window.XLSX.utils.book_new();
-  workbookData.sheets.forEach((sheet) => {
-    const worksheet = buildCompatibleWorksheet(sheet.rows);
-    window.XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
-  });
-
-  const output = writeWorkbookArray(workbook);
-  const blob = new Blob(
-    [output],
-    { type: getExportMimeType() }
-  );
-
-  const filename = buildUnifiedExportFilename();
-  window.saveAs(blob, filename);
-  return filename;
-}
-
-export function exportLunfeiExcel(snList, boxRecord, moInput) {
-  if (!Array.isArray(snList) || snList.length === 0) {
-    throw new Error("沒有可匯出的倫飛序號資料。");
-  }
-
-  const profile = getActiveCustomerProfile();
-  const workbookData = buildWorkbookByStrategy(profile?.exportStrategy || "dual_sn_box", {
-    snList,
-    boxRecord
-  });
-  const workbook = window.XLSX.utils.book_new();
-  workbookData.sheets.forEach((sheet) => {
-    const worksheet = buildCompatibleWorksheet(sheet.rows);
-    window.XLSX.utils.book_append_sheet(workbook, worksheet, sheet.name);
-  });
-
-  const output = writeWorkbookArray(workbook);
-  const blob = new Blob(
-    [output],
-    { type: getExportMimeType() }
-  );
-
-  const filename = buildUnifiedExportFilename();
-  window.saveAs(blob, filename);
-  return filename;
-}
-
-export function exportBngExcel(bundle, workOrderInput) {
-  const snRowsData = Array.isArray(bundle?.snRows) ? bundle.snRows : [];
-  if (snRowsData.length === 0) {
-    throw new Error("沒有可匯出的超恩序號資料。");
-  }
-
-  const boxRecord = bundle?.boxRecord || {};
-  const snRows = [
-    ["序號", "MAC Address", "uuid1", "uuid2", "機種名稱", "BIOS", "FW"],
-    ...snRowsData.map((row) => [
-      String(row["序號"] ?? ""),
-      String(row["MAC Address"] ?? ""),
-      String(row.uuid1 ?? ""),
-      String(row.uuid2 ?? ""),
-      String(row["機種名稱"] ?? ""),
-      String(row.BIOS ?? ""),
-      String(row.FW ?? "")
-    ])
-  ];
-  const boxRows = [[
-    "PO",
-    "Model",
-    "料號",
-    "SN",
-    "思創PN",
-    "Date"
-  ], [
-    String(boxRecord.PO ?? ""),
-    String(boxRecord.Model ?? ""),
-    String(boxRecord["料號"] ?? ""),
-    String(boxRecord.SN ?? ""),
-    String(boxRecord["思創PN"] ?? ""),
-    String(boxRecord.Date ?? "")
-  ]];
-
-  const workbook = window.XLSX.utils.book_new();
-  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(snRows), "SN");
-  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(boxRows), "BOX");
-  const output = writeWorkbookArray(workbook);
-  const blob = new Blob(
-    [output],
-    { type: getExportMimeType() }
-  );
-  const filename = buildUnifiedExportFilename();
-  window.saveAs(blob, filename);
-  return filename;
-}
-
-export function generateChgExportBundle(args) {
-  const workOrder = String(args?.workOrder ?? "").trim();
-  const pn = String(args?.pn ?? "").trim();
-  const fullPn = String(args?.fullPn ?? "").trim();
-  const model = String(args?.model ?? "").trim();
-  const po = String(args?.po ?? "").trim();
-  const boxQty = String(args?.boxQty ?? "").trim();
-  const labelQty = Number(args?.labelQty);
-
-  if (!workOrder) {
-    throw new Error("缺少工單，無法生成。");
-  }
-  if (!Number.isInteger(labelQty) || labelQty <= 0) {
-    throw new Error("小張貼紙必須為正整數。");
-  }
-
-  const snRows = Array.from({ length: labelQty }, () => ({
-    "工單": workOrder,
-    PN: pn
-  }));
-
-  const boxRecord = {
-    PO: po,
-    PN: pn,
-    "full PN": fullPn,
-    "DDC PN": model,
-    "DDC LOT": workOrder,
-    QTY: boxQty,
-    DATE: getTodayDateText()
-  };
-
-  return {
-    snRows,
-    boxRecord,
-    generated: {
-      labelQty
-    }
-  };
-}
-
-export function exportChgExcel(bundle, workOrderInput) {
-  const snRowsData = Array.isArray(bundle?.snRows) ? bundle.snRows : [];
-  if (snRowsData.length === 0) {
-    throw new Error("沒有可匯出的 KOYA 標籤資料。");
-  }
-  const boxRecord = bundle?.boxRecord || {};
-  const snRows = [
-    ["工單", "PN"],
-    ...snRowsData.map((row) => [
-      String(row["工單"] ?? ""),
-      String(row.PN ?? "")
-    ])
-  ];
-  const boxRows = [[
-    "PO",
-    "PN",
-    "full PN",
-    "DDC PN",
-    "DDC LOT",
-    "QTY",
-    "DATE"
-  ], [
-    String(boxRecord.PO ?? ""),
-    String(boxRecord.PN ?? ""),
-    String(boxRecord["full PN"] ?? ""),
-    String(boxRecord["DDC PN"] ?? ""),
-    String(boxRecord["DDC LOT"] ?? ""),
-    String(boxRecord.QTY ?? ""),
-    String(boxRecord.DATE ?? "")
-  ]];
-
-  const workbook = window.XLSX.utils.book_new();
-  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(snRows), "SN");
-  window.XLSX.utils.book_append_sheet(workbook, buildCompatibleWorksheet(boxRows), "BOX");
-  const output = writeWorkbookArray(workbook);
-  const blob = new Blob(
-    [output],
-    { type: getExportMimeType() }
-  );
-  const filename = buildUnifiedExportFilename();
-  window.saveAs(blob, filename);
-  return filename;
 }
 
 function splitRangeValue(rawValue) {
@@ -598,7 +217,6 @@ function expandUuidRange(rawValue) {
   return { normalized: `${start} ~ ${end}`, values };
 }
 
-// 【用途】超恩匯出時將 UUID 拆成兩欄：uuid1(前15碼) + uuid2(後17個F)
 function splitBngUuidForExport(value) {
   const text = String(value ?? "").trim();
   if (!text || text === "無") {
@@ -617,6 +235,46 @@ function splitBngUuidForExport(value) {
   return {
     uuid1: matched[1].toUpperCase(),
     uuid2: matched[2].toUpperCase()
+  };
+}
+
+export function generateChgExportBundle(args) {
+  const workOrder = String(args?.workOrder ?? "").trim();
+  const pn = String(args?.pn ?? "").trim();
+  const fullPn = String(args?.fullPn ?? "").trim();
+  const model = String(args?.model ?? "").trim();
+  const po = String(args?.po ?? "").trim();
+  const boxQty = String(args?.boxQty ?? "").trim();
+  const labelQty = Number(args?.labelQty);
+
+  if (!workOrder) {
+    throw new Error("缺少工單，無法生成。");
+  }
+  if (!Number.isInteger(labelQty) || labelQty <= 0) {
+    throw new Error("小張貼紙必須為正整數。");
+  }
+
+  const snRows = Array.from({ length: labelQty }, () => ({
+    "工單": workOrder,
+    PN: pn
+  }));
+
+  const boxRecord = {
+    PO: po,
+    PN: pn,
+    "full PN": fullPn,
+    "DDC PN": model,
+    "DDC LOT": workOrder,
+    QTY: boxQty,
+    DATE: getTodayDateText()
+  };
+
+  return {
+    snRows,
+    boxRecord,
+    generated: {
+      labelQty
+    }
   };
 }
 

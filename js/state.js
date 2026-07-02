@@ -10,6 +10,8 @@ export const state = {
   currentRow: null,
   currentQuery: "",
   generatedSNList: [],
+  printNoticeEntries: [],
+  printHistoryCustomerFilter: "all",
   isLoading: false
 };
 
@@ -96,6 +98,24 @@ export function createUiRefs() {
     clgCountInput: document.getElementById("clg-count-input"),
     clgSuffixInput: document.getElementById("clg-suffix-input"),
     clgBaseSelect: document.getElementById("clg-base-select"),
+    clgSettingsToggleBtn: document.getElementById("btn-clg-settings-toggle"),
+    clgSerialSettingsCard: document.getElementById("clg-serial-settings-card"),
+    clgSettingsPlannedPreviewRoot: document.getElementById("clg-settings-planned-preview-root"),
+    homeShell: document.getElementById("home-shell"),
+    homePrintNoticeBoard: document.getElementById("home-print-notice-board"),
+    homePrintNoticeList: document.getElementById("home-print-notice-list"),
+    homeSearchTypeSelect: document.getElementById("home-search-type"),
+    homeSearchInput: document.getElementById("home-search-input"),
+    homeQueryBtn: document.getElementById("btn-home-query"),
+    homeHistoryBtn: document.getElementById("btn-home-history"),
+    homePrintHistoryBtn: document.getElementById("btn-home-print-history"),
+    homeExportBtn: document.getElementById("btn-home-export"),
+    homeBngPrintBtn: document.getElementById("btn-home-print-bng"),
+    homeStatus: document.getElementById("home-status"),
+    homeLoadingIndicator: document.getElementById("home-loading-indicator"),
+    homePreviewPanel: document.getElementById("home-preview-panel"),
+    homeHistoryPanel: document.getElementById("home-history-panel"),
+    homePrintHistoryPanel: document.getElementById("home-print-history-panel"),
     bngReceiptPrintRoot: document.getElementById("bng-receipt-print-root")
   };
 }

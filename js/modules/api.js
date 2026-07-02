@@ -104,6 +104,32 @@ export async function resetHistoryByApi(payload) {
   });
 }
 
+export async function getPrintNoticesByApi() {
+  return requestJson("/print-notice", {
+    method: "GET"
+  });
+}
+
+export async function upsertPrintNoticeByApi(payload) {
+  return requestJson("/print-notice/upsert", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deletePrintNoticeByApi(payload) {
+  return requestJson("/print-notice/delete", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function loadDefaultExcelByApi(customer) {
   const key = encodeURIComponent(String(customer ?? "").trim());
   return requestJson(`/excel/load-default?customer=${key}`, {

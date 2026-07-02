@@ -36,6 +36,7 @@ COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "bng": {
         "MO": ["MO", "mo"],
         "DATE": ["日期", "Date"],
+        "SOURCE": ["來源", "拆分標記", "拆分註記", "拆分标记"],
         "WORK_ORDER": ["工單", "工單號"],
         "MODEL": ["機種名稱", "Model", "MODEL"],
         "PART_NO": ["機種料號", "料號", "P/N", "PN"],
@@ -50,6 +51,7 @@ COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
     },
     "chg": {
         "WORK_ORDER": ["工單", "工單號"],
+        "WORK_ORDER_MONTH": ["工單月份", "月份", "工單月"],
         "QTY": ["小張貼紙", "QTY", "Qty", "數量"],
         "MODEL": ["機種", "Model", "MODEL"],
         "PN": ["PN", "P/N", "料號"],

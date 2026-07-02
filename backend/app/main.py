@@ -8,6 +8,7 @@ from app.routers import (
     export_router,
     health_router,
     history_router,
+    print_notice_router,
     sn_router,
 )
 
@@ -30,3 +31,4 @@ app.include_router(excel_router, prefix=settings.api_prefix)
 app.include_router(sn_router, prefix=settings.api_prefix)
 app.include_router(export_router, prefix=settings.api_prefix)
 app.include_router(history_router, prefix=settings.api_prefix)
+app.include_router(print_notice_router, prefix=settings.api_prefix)
