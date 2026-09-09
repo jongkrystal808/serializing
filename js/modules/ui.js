@@ -32,7 +32,7 @@ export {
   renderClgSearchSuccess
 } from "./uiPreviewRenderers.js";
 
-export function updateStatus(ui, message, isError = false, isLoading = false, isSuccess = false) {
+export function updateStatus(ui, message, isError = false, isLoading = false, isSuccess = false, isDuplicateHit = false) {
   const statusElement = ui?.status;
   if (!statusElement) {
     return;
@@ -41,6 +41,7 @@ export function updateStatus(ui, message, isError = false, isLoading = false, is
   statusElement.classList.toggle("error", Boolean(isError));
   statusElement.classList.toggle("loading", !isError && Boolean(isLoading));
   statusElement.classList.toggle("success", !isError && !isLoading && Boolean(isSuccess));
+  statusElement.classList.toggle("duplicate-hit", !isLoading && Boolean(isDuplicateHit));
 }
 
 export function renderLoadResult(ui, rows, fileName) {

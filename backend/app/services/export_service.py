@@ -62,7 +62,7 @@ class ExportService:
         workbook.save(output)
         content = output.getvalue()
         safe_label = customer if customer else "客戶"
-        filename = payload.file_name.strip() or f"{safe_label}-SN.xls"
+        filename = payload.file_name.strip() or f"{safe_label}-SN.xlsx"
         return (
             filename,
             content,

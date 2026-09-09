@@ -13,6 +13,12 @@ services:
       - MAX_EXCEL_UNCOMPRESSED_BYTES=104857600
     volumes:
       - ./backend/data:/app/backend/data
+      # -----------------------------------------------------------------------
+      # 【測試機環境】將本機出貨記錄總表.xlsx 掛載進容器供 load-default 使用
+      # 對應 config.py 中 default_excel 的 /mnt/testdata/ 路徑
+      # 部署正式機時請移除此行（正式機透過 /mnt/netdisk 存取網路磁碟）
+      # -----------------------------------------------------------------------
+      - ./出貨記錄總表.xlsx:/mnt/testdata/出貨記錄總表.xlsx:ro
     networks:
       - sn_net
 

@@ -66,6 +66,19 @@ function renderSheetContentPane(rows) {
   `;
 }
 
+// 【用途】MO 恰好命中兩筆時，在預覽首頁直接並列完整來源資料供人工核對。
+function renderDuplicateMoRows(rows) {
+  if (!Array.isArray(rows) || rows.length !== 2) {
+    return "";
+  }
+  return `
+    <section class="duplicate-mo-results" aria-label="MO 命中兩筆資料">
+      <p class="duplicate-hit-message">⚠ 此 MO 命中 2 筆資料，請確認後再進行後續操作。</p>
+      ${renderSheetContentPane(rows)}
+    </section>
+  `;
+}
+
 function renderHistoryPane(workOrderHistory, clearButtonId = "btn-clear-history") {
   const items = workOrderHistory
     .map((record) => `<li>${escapeHtml(record)}</li>`)
@@ -94,13 +107,15 @@ function renderCustomerSearchSuccessLayout(panelElement, options) {
     previewHtml,
     rowData,
     generationHistory,
-    clearHistoryButtonId
+    clearHistoryButtonId,
+    matchedRows
   } = options;
   const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
   const customTabs = getConfiguredPreviewTabs(customerKey);
   replaceChildrenFromTrustedTemplate(panelElement, `
     ${renderTitleWithHelp(title, "preview-panel")}
-    <p>查詢${escapeHtml(queryLabel)}：${escapeHtml(query)}（命中 ${Number(matchCount) || 0} 筆，預設取第 1 筆）</p>
+    <p${Number(matchCount) === 2 ? ' class="duplicate-hit-message"' : ""}>查詢${escapeHtml(queryLabel)}：${escapeHtml(query)}（命中 ${Number(matchCount) || 0} 筆${Number(matchCount) === 2 ? "，下方顯示兩筆資料；後續操作預設使用第 1 筆" : "，預設取第 1 筆"}）</p>
+    ${renderDuplicateMoRows(matchedRows)}
     ${renderPrintedToggle(printNotice || {})}
     ${headlineHtml}
     ${renderPreviewTabs(customerKey, hasHistory, customTabs)}
@@ -535,7 +550,8 @@ export function renderLunfeiSearchSuccess(ui, args) {
     `,
     rowData,
     generationHistory,
-    clearHistoryButtonId: "btn-clear-history-lunfei"
+    clearHistoryButtonId: "btn-clear-history-lunfei",
+    matchedRows: args.matchedRows
   });
 }
 
@@ -702,7 +718,8 @@ export function renderBngSearchSuccess(ui, args) {
     `,
     rowData,
     generationHistory,
-    clearHistoryButtonId: "btn-clear-history-bng"
+    clearHistoryButtonId: "btn-clear-history-bng",
+    matchedRows: args.matchedRows
   });
 }
 

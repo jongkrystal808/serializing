@@ -246,16 +246,45 @@ function renderHomePrintNoticeBoard() {
     );
     return;
   }
+  const groups = buildPrintedNoticeGroups(entries);
   replaceChildrenFromTrustedTemplate(
     ui.homePrintNoticeList,
-    entries.map((entry) => `
-      <article class="home-print-notice-item" data-customer-key="${escapeHtml(entry.customerKey)}">
-        <span class="home-print-notice-customer">${escapeHtml(entry.customerLabel)}</span>
-        <span class="home-print-notice-date">${escapeHtml(formatPrintedNoticeDate(entry.createdAt))}</span>
-        <p class="home-print-notice-main">${escapeHtml(entry.workOrderValue)}${escapeHtml(entry.workOrderLabel)}已列印</p>
-      </article>
+    groups.map((group, index) => `
+      <details class="home-print-notice-group"${index === 0 ? " open" : ""}>
+        <summary class="home-print-notice-group-summary">${escapeHtml(group.dateLabel)}</summary>
+        <div class="home-print-notice-group-items">
+          ${group.items.map((entry) => `
+            <article class="home-print-notice-item" data-customer-key="${escapeHtml(entry.customerKey)}">
+              <p class="home-print-notice-main">${escapeHtml(formatPrintedNoticeBoardItem(entry))}</p>
+            </article>
+          `).join("")}
+        </div>
+      </details>
     `).join("")
   );
+}
+
+function buildPrintedNoticeGroups(entries) {
+  const groupMap = new Map();
+  entries.forEach((entry) => {
+    const dateLabel = formatPrintedNoticeDate(entry.createdAt);
+    if (!groupMap.has(dateLabel)) {
+      groupMap.set(dateLabel, {
+        sortTimestamp: Number(entry.createdAt),
+        items: []
+      });
+    }
+    const group = groupMap.get(dateLabel);
+    group.sortTimestamp = Math.max(Number(group.sortTimestamp), Number(entry.createdAt));
+    group.items.push(entry);
+  });
+  return Array.from(groupMap.entries())
+    .map(([dateLabel, group]) => ({
+      dateLabel,
+      sortTimestamp: Number(group.sortTimestamp),
+      items: group.items.slice().sort((a, b) => Number(b.createdAt) - Number(a.createdAt))
+    }))
+    .sort((a, b) => Number(b.sortTimestamp) - Number(a.sortTimestamp));
 }
 
 function getWeekRangeLabel(timestamp) {
@@ -365,7 +394,7 @@ function renderHomePrintHistoryPanel() {
     .map((group) => {
       const itemsHtml = group.items.map((entry) => `
         <div class="print-history-item">
-          <p class="print-history-item-main">${escapeHtml(entry.customerLabel)}-${escapeHtml(entry.workOrderValue)}${escapeHtml(entry.workOrderLabel)}已列印</p>
+          <p class="print-history-item-main">${escapeHtml(formatPrintedNoticeBoardItem(entry))}</p>
           <div class="print-history-item-actions">
             <p class="print-history-item-time">${escapeHtml(formatPrintedNoticeTime(entry.createdAt))}</p>
             <button
@@ -409,6 +438,12 @@ function formatPrintedNoticeDate(timestamp) {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const dd = String(date.getDate()).padStart(2, "0");
   return `${yyyy}.${mm}.${dd}`;
+}
+
+function formatPrintedNoticeBoardItem(entry) {
+  const customerLabel = String(entry?.customerLabel ?? "").trim();
+  const workOrderValue = String(entry?.workOrderValue ?? "").trim();
+  return `${customerLabel} - ${workOrderValue}`;
 }
 
 function syncPrintedToggleCheckboxes(customerKey, workOrderValue, checked) {
@@ -621,7 +656,7 @@ async function loadHistorySnapshot(customer) {
 }
 
 function triggerBlobDownload(blob, filename) {
-  const fileName = String(filename ?? "").trim() || "download.xls";
+  const fileName = String(filename ?? "").trim() || "download.xlsx";
   const url = window.URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -667,8 +702,8 @@ function setLoading(isLoading, message = "") {
   }
 }
 
-function updateLunfeiStatus(message, isError = false, isLoading = false) {
-  updateStatus({ status: ui.lunfeiStatus }, message, isError, isLoading);
+function updateLunfeiStatus(message, isError = false, isLoading = false, isDuplicateHit = false) {
+  updateStatus({ status: ui.lunfeiStatus }, message, isError, isLoading, false, isDuplicateHit);
 }
 
 function setLunfeiLoading(isLoading, message = "") {
@@ -683,8 +718,8 @@ function setLunfeiLoading(isLoading, message = "") {
   }
 }
 
-function updateBngStatus(message, isError = false, isLoading = false) {
-  updateStatus({ status: ui.bngStatus }, message, isError, isLoading);
+function updateBngStatus(message, isError = false, isLoading = false, isDuplicateHit = false) {
+  updateStatus({ status: ui.bngStatus }, message, isError, isLoading, false, isDuplicateHit);
 }
 
 function setBngLoading(isLoading, message = "") {
@@ -767,8 +802,8 @@ function setClgLoading(isLoading, message = "") {
 }
 
 // 【用途】更新首頁狀態文字，供單一首頁模式顯示查詢/匯出結果
-function updateHomeStatus(message, isError = false, isLoading = false, isSuccess = false) {
-  updateStatus({ status: ui.homeStatus }, message, isError, isLoading, isSuccess);
+function updateHomeStatus(message, isError = false, isLoading = false, isSuccess = false, isDuplicateHit = false) {
+  updateStatus({ status: ui.homeStatus }, message, isError, isLoading, isSuccess, isDuplicateHit);
 }
 
 // 【用途】控制首頁載入狀態與查詢按鈕可用性
@@ -1547,7 +1582,7 @@ async function onClgCopySerialTextClick(event) {
 }
 
 function getClgExportFileName() {
-  const defaultName = `${String(getActiveCustomerProfile()?.label ?? "Cubepilot")}-SN.xls`;
+  const defaultName = `${String(getActiveCustomerProfile()?.label ?? "Cubepilot")}-SN.xlsx`;
   const input = window.prompt("請輸入匯出檔名（可含副檔名）", defaultName);
   if (input === null) {
     return "";
@@ -1556,7 +1591,7 @@ function getClgExportFileName() {
   if (!normalized) {
     return defaultName;
   }
-  return /\.(xls|xlsx)$/i.test(normalized) ? normalized : `${normalized}.xls`;
+  return /\.(xls|xlsx)$/i.test(normalized) ? normalized : `${normalized}.xlsx`;
 }
 
 // 【用途】依客戶 key 取得對應預覽 panel 節點
@@ -1903,6 +1938,9 @@ async function performLunfeiSearch() {
 
   state.currentRow = matchedRows[0];
   state.currentQuery = query;
+  if (matchedRows.length === 2) {
+    window.alert(`警示：MO ${query} 命中 2 筆資料，請確認兩筆資訊後再進行後續操作。`);
+  }
   try {
     const resolvedQty = resolveQtyByPairedSlash(state.currentRow, query, "MO", "QTY");
     const historySnapshot = await loadHistorySnapshot("lunfei");
@@ -1916,6 +1954,7 @@ async function performLunfeiSearch() {
       rowData: state.lunfeiRowData,
       generationHistory,
       resolvedQty,
+      matchedRows,
       printNotice: buildPrintNotice("lunfei", "MO", query)
     });
     bindPreviewTabsIn(ui.lunfeiPreviewPanel);
@@ -1938,7 +1977,12 @@ async function performLunfeiSearch() {
       ui.lunfeiExportBtn.disabled = false;
     }
 
-    updateLunfeiStatus(`查詢成功：${query}（命中 ${matchedRows.length} 筆）`);
+    updateLunfeiStatus(
+      `查詢成功：${query}（命中 ${matchedRows.length} 筆）`,
+      false,
+      false,
+      matchedRows.length === 2
+    );
   } catch (error) {
     updateLunfeiStatus(`歷史載入失敗：${getSafeErrorMessage(error)}`, true);
   }
@@ -1969,6 +2013,9 @@ async function performBngSearch() {
 
   state.currentRow = matchedRows[0];
   state.currentQuery = query;
+  if (matchedRows.length === 2) {
+    window.alert(`警示：MO ${query} 命中 2 筆資料，請確認兩筆資訊後再進行後續操作。`);
+  }
   try {
     const historySnapshot = await loadHistorySnapshot("bng");
     const generationHistory = filterGenerationRecords(historySnapshot.records, query);
@@ -1987,6 +2034,7 @@ async function performBngSearch() {
       rowData: state.bngRowData,
       generationHistory,
       normalizedRanges,
+      matchedRows,
       printNotice: buildPrintNotice("bng", "MO", query)
     });
     bindPreviewTabsIn(ui.bngPreviewPanel);
@@ -2001,7 +2049,12 @@ async function performBngSearch() {
     });
     ui.bngExportBtn.disabled = false;
     setBngPrintEnabled(true);
-    updateBngStatus(`查詢成功：MO ${query}（命中 ${matchedRows.length} 筆）`);
+    updateBngStatus(
+      `查詢成功：MO ${query}（命中 ${matchedRows.length} 筆）`,
+      false,
+      false,
+      matchedRows.length === 2
+    );
   } catch (error) {
     setBngPrintEnabled(false);
     updateBngStatus(`歷史載入失敗：${getSafeErrorMessage(error)}`, true);
@@ -2729,10 +2782,10 @@ function getActiveCustomerExportFilename() {
       .replace(/[\\/:*?"<>|]/g, "_")
       .replace(/\s+/g, "_")
       .replace(/\.+$/g, "") || "model";
-    return `${yyyy}${mm}${dd}-${safeModel}.xls`;
+    return `${yyyy}${mm}${dd}-${safeModel}.xlsx`;
   }
   const label = String(getActiveCustomerProfile()?.label ?? "").trim() || getActiveCustomerKey();
-  return `${label}-SN.xls`;
+  return `${label}-SN.xlsx`;
 }
 
 async function onExportClick() {

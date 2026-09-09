@@ -19,10 +19,10 @@ def _sanitize_download_filename(filename: str) -> str:
 @router.post("")
 def export_excel(payload: ExportRequest):
     filename, content, mime = export_service.export(payload)
-    safe_filename = _sanitize_download_filename(filename).strip() or "download.xls"
+    safe_filename = _sanitize_download_filename(filename).strip() or "download.xlsx"
     ascii_filename = "".join(char if ord(char) < 128 else "_" for char in safe_filename)
     if not ascii_filename:
-        ascii_filename = "download.xls"
+        ascii_filename = "download.xlsx"
     encoded_filename = quote(safe_filename, safe="")
     return StreamingResponse(
         iter([content]),

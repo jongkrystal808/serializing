@@ -52,7 +52,7 @@ function parseFilenameFromContentDisposition(headerValue) {
   if (plainMatch && plainMatch[1]) {
     return plainMatch[1];
   }
-  return "download.xls";
+  return "download.xlsx";
 }
 
 export async function parseExcelByApi({ customer, sheetName, parseRules, file }) {

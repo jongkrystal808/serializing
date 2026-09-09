@@ -292,7 +292,18 @@ export function createHomeController(deps) {
         syncHomePreviewPanel(target);
       }
       if (state.currentRow) {
-        updateHomeStatus(`已命中 ${getHomeCustomerLabel(target)}：${query}`, false, false, true);
+        const isDuplicateMoHit = mode === HOME_SEARCH_MODE_WORKORDER
+          && (target === CUSTOMER_KEYS.LUNFEI || target === CUSTOMER_KEYS.BNG)
+          && matchedRows.length === 2;
+        updateHomeStatus(
+          isDuplicateMoHit
+            ? `警示：${getHomeCustomerLabel(target)} MO ${query} 命中 2 筆資料，請確認。`
+            : `已命中 ${getHomeCustomerLabel(target)}：${query}`,
+          false,
+          false,
+          !isDuplicateMoHit,
+          isDuplicateMoHit
+        );
       } else if (matchedRows.length > 0) {
         updateHomeStatus(`已命中 ${getHomeCustomerLabel(target)} ${matchedRows.length} 筆，請選擇目標資料。`, false, false, true);
       } else {

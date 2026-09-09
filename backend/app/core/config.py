@@ -55,33 +55,43 @@ class Settings:
         """【用途】允許 multipart metadata 的額外空間，同時限制整體 request body。"""
         return self.max_excel_upload_bytes + 1024 * 1024
 
+    # -------------------------------------------------------------------------
+    # 【測試機環境】
+    # 以下路徑為本機開發 Docker 測試用，對應 docker-compose.yml 中的 volume mount：
+    #   - ./出貨記錄總表.xlsx → 容器內 /mnt/testdata/出貨記錄總表.xlsx
+    #
+    # 正式機環境路徑（請勿直接修改，切換時直接替換整個 default_excel 區塊）：
+    #   path="/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx"
+    # -------------------------------------------------------------------------
     default_excel: Dict[str, CustomerFileConfig] = field(default_factory=lambda: {
         "yingbang": CustomerFileConfig(
-            path="/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx",
+            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】掛載自本機 Serializing/出貨記錄總表.xlsx
             sheet_name="營邦出貨",
             parse_rules=["arrow"],
         ),
         "lunfei": CustomerFileConfig(
-            path="/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx",
+            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】同上
             sheet_name="倫飛出貨",
             parse_rules=["arrow"],
         ),
         "bng": CustomerFileConfig(
-            path="/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx",
+            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】同上
             sheet_name="超恩出貨",
             parse_rules=["trim"],
         ),
         "chg": CustomerFileConfig(
-            path="/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx",
+            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】同上
             sheet_name="KOYA出貨",
             parse_rules=["trim"],
         ),
         "clg": CustomerFileConfig(
+            # 【測試機】本機無此檔，load-default 對 clg 會回傳 DEFAULT_FILE_NOT_FOUND（正常）
             path="/mnt/netdisk/@思創出貨計畫(Cubepilot)/各機種貼紙代碼/PCB板階、測試階序號编碼.xls",
             sheet_name="板階序號編碼",
             parse_rules=["none"],
         ),
         "hmg": CustomerFileConfig(
+            # 【測試機】本機無此檔，load-default 對 hmg 會回傳 DEFAULT_FILE_NOT_FOUND（正常）
             path="/mnt/netdisk/@思創出貨計畫(Cubepilot)/各機種貼紙代碼/組裝、包裝階序號編碼.xls",
             sheet_name="組測序號編碼",
             parse_rules=["trim"],
