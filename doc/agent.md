@@ -1,7 +1,7 @@
 # Development Process Guide / 開發流程指南
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ---
@@ -150,6 +150,8 @@ Step 3: 找到原因後，更新 doc/debug.md
 - [ ] **序號派發具原子性** — 流水號讀取與遞增不得拆成兩次資料庫操作
 - [ ] **CORS 明確列舉來源** — 啟用 credentials 時禁止萬用來源 `*`
 - [ ] **不信任內容不可直接寫入 innerHTML** — localStorage、API 與使用者輸入需轉為純文字或先消毒
+- [ ] **同步 I/O 不得放在 async handler** — Excel、SQLite、網路磁碟與同步匯出路由使用普通 `def` 交由 Thread Pool
+- [ ] **大量重複節點使用事件委派** — 表格儲存格等動態集合不得逐一註冊相同 listener
 
 ---
 

@@ -1,6 +1,6 @@
 # SN-GENERATOR 前端代碼地圖 (Front-End Code Map)
 
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ---
@@ -22,6 +22,7 @@ graph TD
     app --> custCols["customerColumns.js"]
     app --> serialSet["serialSettings.js"]
     app --> bngReceipt["bngReceipt.js"]
+    app --> customTabs["previewCustomTabs.js"]
     app --> ui["ui.js"]
 
     custCols --> utils
@@ -47,7 +48,7 @@ graph TD
 | Filename | Size | Line Count | Description | Key Exports |
 | :--- | :--- | :--- | :--- | :--- |
 | `index.html` | 26KB | - | Global config (`window.CUSTOMERS`), CDN libs, module entry | - |
-| `app.js` | 116KB | 3571 | Main controller, event bindings, customer flows, custom-tab persistence migration | - |
+| `app.js` | 109KB | 3355 | Main controller, event bindings and customer flows | - |
 | `config.js` | 2KB | - | CONFIG dynamic getter, customer key management, localStorage state | - |
 | `state.js` | 7KB | 121 | Global state object (12 properties), `createUiRefs()` with 65 DOM refs | - |
 | `api.js` | 4KB | 160 | 10 API wrapper functions (parse, generate, history, export, print-notice) | - |
@@ -56,8 +57,9 @@ graph TD
 | `homeController.js` | 18KB | - | Home aggregated search factory (`createHomeController`), dual mode search | - |
 | `serialSettings.js` | 5KB | - | CLG custom base serial (10/16/cycle_0_6/cycle_1_6) with BigInt | - |
 | `bngReceipt.js` | 4KB | - | BNG receipt payload builder + 190mm×55mm print HTML template | - |
+| `previewCustomTabs.js` | 7KB | 212 | Custom-tab controller: localStorage persistence, legacy HTML migration, add/remove/edit | `createPreviewCustomTabsController` |
 | `ui.js` | 7KB | 197 | UI aggregation entry, re-exports from clipboard/history/renderers + tab/status/custom-tab safe-edit bindings | - |
-| `uiClipboard.js` | 4KB | - | Dual-layer clipboard (Clipboard API + `execCommand` fallback), cell/button bindings | - |
+| `uiClipboard.js` | 4KB | - | Dual-layer clipboard; sheet cells use one delegated root listener instead of per-cell listeners | - |
 | `uiHistory.js` | 2KB | - | History table renderer + reset button bindings | - |
 | `uiPreviewRenderers.js` | 32KB | 914 | 6-customer preview renderers, escaped custom-tab rendering and legacy HTML-to-text conversion | - |
 | `customerColumns.js` | 1KB | - | Customer-specific column resolver with alias matching | - |
@@ -139,3 +141,9 @@ Major event bindings from `initEvents()` in `app.js` categorized by:
 - **custom tabs:** Addition, deletion, plain-text paste/drop filtering, updating
 - **print:** Triggering browser print dialog for receipts/notices
 - **settings:** Configuration application and modal toggling
+
+## 9. 效能與模組化狀態 (Performance and Modularization Status)
+
+- `bindSheetCopyCellsIn()` 在每個預覽 root 僅註冊一次 `click` listener，透過 `closest('.copyable-cell')` 處理目前及後續動態產生的所有儲存格；重複 bind 不會增加 listener。
+- 自訂頁籤的 localStorage、HTML-to-text 遷移、索引解析與 CRUD 已從 `app.js` 移至 `previewCustomTabs.js`，主檔由 3,571 行降至 3,355 行。
+- `app.js` 仍包含多客戶流程與匯出協調，後續拆分工作持續列於 T69，不視為完全結案。

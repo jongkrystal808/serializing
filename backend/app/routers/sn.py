@@ -8,6 +8,6 @@ router = APIRouter(prefix="/sn", tags=["sn"])
 
 
 @router.post("/generate")
-async def generate_sn(payload: GenerateSnRequest):
+def generate_sn(payload: GenerateSnRequest):
     result = sn_service.generate(payload)
     return ok(result.model_dump(), "SN 生成請求已接收")

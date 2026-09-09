@@ -1,7 +1,7 @@
 # Debug Log / 錯誤紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ---
@@ -13,6 +13,48 @@
 ---
 
 ## ✅ Resolved Bugs
+
+### BUG-20260909-004 — 同步 I/O 阻塞 FastAPI Event Loop
+
+**Severity:** P1 / Stability
+
+**Affected:** `backend/app/routers/excel.py`, `export.py`, `history.py`, `sn.py`, `print_notice.py`
+
+**Root Cause:** handler 宣告為 `async def`，內部卻直接執行 openpyxl、sqlite3、同步檔案讀取與匯出，工作會占住 Event Loop。
+
+**Fix:** 所有含同步 I/O 的 handler 改為普通 `def`；UploadFile 改由 worker thread 讀取 `file.file.read()`。純記憶體 health check 保持 async。
+
+**Verification:** route inspection 2/2、既有 T27 integration 7/7 通過。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-005 — 大表格逐格綁定 click listener
+
+**Severity:** P1 / Performance
+
+**Affected:** `js/modules/uiClipboard.js`
+
+**Root Cause:** `bindSheetCopyCellsIn()` 對每個 `.copyable-cell` 呼叫 `addEventListener`，listener 數量隨表格儲存格呈 O(N) 成長。
+
+**Fix:** 在預覽 root 建立單一 click listener，使用 `closest()` 做事件委派，並以 root flag 防止重複綁定。
+
+**Verification:** Node regression 驗證同一 root 重複 bind 仍只有一個 listener，且動態儲存格可正常複製。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-006 — app.js 功能域持續膨脹
+
+**Severity:** P1 / Maintainability
+
+**Affected:** `js/app.js`, `js/modules/previewCustomTabs.js`
+
+**Root Cause:** 自訂頁籤的儲存、資料遷移、識別碼解析及 CRUD 與主客戶流程混在單一控制器。
+
+**Fix:** 抽成 `createPreviewCustomTabsController()`，由 `app.js` 僅注入客戶設定、重新渲染及頁籤啟用 callback。
+
+**Verification:** JavaScript syntax checks 與事件委派 regression 通過；`app.js` 由 3,571 行降至 3,355 行。主檔後續拆分仍由 T69 追蹤。
+
+**Resolved milestone:** 2026-09-09
 
 ### BUG-20260909-001 — 並行請求可能產生重複序號
 
@@ -68,6 +110,8 @@ cd ..
 node --check js\app.js
 node --check js\modules\ui.js
 node --check js\modules\uiPreviewRenderers.js
+node --check js\modules\previewCustomTabs.js
+node --experimental-default-type=module js\tests\p1_regression.mjs
 ```
 
-目前結果：P0 regression 3/3、T27 integration 7/7、JavaScript syntax checks 全數通過。
+目前結果：P0/P1 regression 5/5、T27 integration 7/7、前端事件委派 regression 與 JavaScript syntax checks 全數通過。

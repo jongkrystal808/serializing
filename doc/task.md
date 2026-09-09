@@ -1,7 +1,7 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ---
@@ -16,7 +16,21 @@
 
 ## 🔄 In Progress
 
-（目前無）
+### T69 — P1 效能與架構改善
+**Module:** Backend / Frontend / Performance
+**Priority:** 🟡 Medium
+
+**Sub-tasks:**
+- [x] 將含同步 I/O 的 async 路由改為同步 `def`，保留輕量 health async（完成：2026-09-09）
+- [x] 前端表格儲存格改用 O(1) 事件委派（完成：2026-09-09）
+- [x] 抽離自訂頁籤持久化、遷移與 CRUD 至 `previewCustomTabs.js`（完成：2026-09-09）
+- [ ] 持續拆分 `app.js` 中的客戶流程控制器與匯出協調邏輯
+- [ ] 修正資料庫路徑為動態絕對路徑（config.py）
+- [ ] 移除 500 錯誤中的內部資訊洩漏（errors.py）
+- [ ] 加入檔案上傳大小限制
+- [ ] 修正 HTTP Header 注入風險（export.py）
+
+**Current Result:** 阻塞 I/O 已交由 FastAPI Thread Pool；大表格每個預覽 root 固定一個儲存格 listener；`app.js` 由 3,571 行降至 3,355 行。新增後端 P1 route regression 2/2 與前端事件委派測試，既有 T27 integration 7/7 通過。
 
 ---
 
@@ -32,18 +46,6 @@
 
 **Acceptance Criteria:**
 - New team members can deploy locally from docs
-
-### T69 — P1 效能與架構改善
-**Module:** Backend / Frontend / Performance
-**Priority:** 🟡 Medium
-
-**Sub-tasks:**
-- [ ] 將 async def 路由改為同步 def（避免 Event Loop 阻塞）
-- [ ] 前端事件監聽改為事件委派（uiClipboard.js bindSheetCopyCellsIn）
-- [ ] 修正資料庫路徑為動態絕對路徑（config.py）
-- [ ] 移除 500 錯誤中的內部資訊洩漏（errors.py）
-- [ ] 加入檔案上傳大小限制
-- [ ] 修正 HTTP Header 注入風險（export.py）
 
 ### T70 — P2 程式碼品質改善
 **Module:** Full Stack / Quality
@@ -377,5 +379,5 @@
 | Phase 36（KOYA 工單月份預覽） | 1 | 1 | 0 | 0 |
 | Phase 37（BNG Copy Panel UI 改版） | 1 | 1 | 0 | 0 |
 | Phase 38（KOYA Copy Panel UI 改版） | 1 | 1 | 0 | 0 |
-| Phase 39（Code Review 2026-09-09） | 3 | 1 | 0 | 2 |
-| **Total** | **66** | **63** | **0** | **3** |
+| Phase 39（Code Review 2026-09-09） | 3 | 1 | 1 | 1 |
+| **Total** | **66** | **63** | **1** | **2** |

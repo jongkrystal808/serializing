@@ -8,7 +8,7 @@ router = APIRouter(prefix="/history", tags=["history"])
 
 
 @router.get("/{customer}")
-async def get_history(customer: str):
+def get_history(customer: str):
     entries = history_service.list_entries(customer)
     records = history_service.list_generation_records(customer)
     return ok(
@@ -22,7 +22,7 @@ async def get_history(customer: str):
 
 
 @router.post("/upsert")
-async def upsert_history(payload: HistoryUpsertRequest):
+def upsert_history(payload: HistoryUpsertRequest):
     result = history_service.upsert_entry(
         customer=payload.customer,
         key=payload.key,
@@ -42,7 +42,7 @@ async def upsert_history(payload: HistoryUpsertRequest):
 
 
 @router.post("/reset")
-async def reset_history(payload: HistoryResetRequest):
+def reset_history(payload: HistoryResetRequest):
     removed = history_service.reset_entry(payload.customer, payload.key)
     return ok(
         {

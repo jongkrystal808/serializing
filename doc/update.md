@@ -1,10 +1,16 @@
 # Update History / 更新紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ---
+
+## v0.3.39 (2026-09-09)
+- perf(api): 將 Excel、Export、History、SN 與 Print Notice 的同步 I/O handler 改為普通 `def`，交由 FastAPI Thread Pool；輕量 health check 保持 async
+- perf(ui): `bindSheetCopyCellsIn()` 改為預覽 root 單一事件委派，避免大表格建立數千個 click listener，並防止重複綁定
+- refactor(ui): 新增 `previewCustomTabs.js`，集中自訂頁籤 localStorage、舊 HTML 遷移與 CRUD；`app.js` 由 3,571 行降至 3,355 行
+- test: 新增 2 項後端 route execution regression 與前端事件委派測試；P0/P1 unit 5/5、T27 integration 7/7 通過
 
 ## v0.3.38 (2026-09-09)
 - fix(core): 修復 P0 序號競態、CORS 與自訂頁籤 XSS（commit `3e1fb8c`）

@@ -47,23 +47,28 @@ export function bindSheetCopyCells(ui, onCopyError) {
 }
 
 export function bindSheetCopyCellsIn(rootElement, onCopyError) {
-  if (!rootElement) {
+  if (!rootElement || rootElement.__sheetCopyDelegateBound === true) {
     return;
   }
-  const cells = rootElement.querySelectorAll(".copyable-cell");
-  cells.forEach((cell) => {
-    cell.addEventListener("click", async () => {
-      const value = cell.getAttribute("data-copy-value") || "";
-      try {
-        await copyTextToClipboard(value);
-        cell.classList.add("copied");
-        setTimeout(() => {
-          cell.classList.remove("copied");
-        }, 700);
-      } catch (error) {
+  rootElement.__sheetCopyDelegateBound = true;
+  rootElement.addEventListener("click", async (event) => {
+    // 由預覽根節點統一處理動態表格，監聽器數量不再隨儲存格數量成長。
+    const cell = event.target?.closest?.(".copyable-cell");
+    if (!cell || !rootElement.contains(cell)) {
+      return;
+    }
+    const value = cell.getAttribute("data-copy-value") || "";
+    try {
+      await copyTextToClipboard(value);
+      cell.classList.add("copied");
+      setTimeout(() => {
+        cell.classList.remove("copied");
+      }, 700);
+    } catch (error) {
+      if (typeof onCopyError === "function") {
         onCopyError();
       }
-    });
+    }
   });
 }
 

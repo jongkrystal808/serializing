@@ -1,6 +1,6 @@
 # SN-GENERATOR (序號產生器) 系統架構設計文件
 
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ## 1. 系統架構總覽 (Architecture Overview)
@@ -42,7 +42,7 @@ SN-GENERATOR/
 ├── index.html
 ├── styles/main.css
 ├── js/
-│   ├── app.js (3571 lines, main controller)
+│   ├── app.js (3355 lines, main controller)
 │   ├── config.js (customer config reader, CONFIG dynamic getter)
 │   ├── state.js (global state + DOM refs cache)
 │   └── modules/
@@ -51,6 +51,7 @@ SN-GENERATOR/
 │       ├── customerColumns.js (customer field resolver with aliases)
 │       ├── excel.js (week calc, SN prefix, BNG range expand, CHG bundle)
 │       ├── homeController.js (home aggregated search controller)
+│       ├── previewCustomTabs.js (custom-tab persistence, migration and CRUD controller)
 │       ├── serialSettings.js (CLG custom base serial calc)
 │       ├── ui.js (UI aggregation entry, re-exports clipboard/history/renderers)
 │       ├── uiClipboard.js (clipboard copy + cell/button bindings)
@@ -139,6 +140,7 @@ SN-GENERATOR/
 - **Docker Compose**: 使用 `docker-compose.yml` 同時部署 Nginx (負責反向代理與靜態檔) 與 FastAPI (負責 API 邏輯)，預設映射 Port `8080`。
 - **Linux 實體機 (Bare Metal)**: 亦支援於 Linux 原生環境直接利用 Uvicorn/Gunicorn 及本機 Nginx 服務直接啟動。
 - **CORS**: 啟用 credentials 時只接受 `CORS_ALLOWED_ORIGINS` 明確列出的來源；預設為 `http://localhost:8080,http://127.0.0.1:8080`，設定值若包含 `*` 會在啟動時拒絕載入。
+- **路由執行模型**: 會呼叫 Excel parser、SQLite、檔案系統或同步匯出的 handler 使用普通 `def`，由 FastAPI/Starlette 放入 Thread Pool；純記憶體 `/api/health` 保留 `async def`，避免被繁忙 worker thread 拖慢。
 
 ## 10. 關鍵架構決策 (Key Architectural Decisions - ADR)
 
@@ -175,6 +177,9 @@ SN-GENERATOR/
 - ADR-029: 序號派發採 SQLite 原子 UPSERT + RETURNING，取代先讀後寫的 TOCTOU 流程 (已落地)
 - ADR-030: CORS credentials 僅允許明確來源，並禁止萬用來源設定 (已落地)
 - ADR-031: 自訂頁籤採純文字持久化與渲染，舊 HTML 自動降級遷移 (已落地)
+- ADR-032: 同步 I/O API handler 使用 FastAPI Thread Pool，health check 保持輕量 async (已落地)
+- ADR-033: 自訂頁籤持久化、遷移與 CRUD 從 app.js 抽離為 previewCustomTabs controller (已落地)
+- ADR-034: 大表格儲存格複製採預覽根節點事件委派，listener 數量固定為 O(1) (已落地)
 
 ## 11. 錯誤處理 (Error Handling)
 

@@ -45,6 +45,7 @@ import {
   buildBngReceiptPrintPayload,
   renderBngReceiptPrintHtml
 } from "./modules/bngReceipt.js";
+import { createPreviewCustomTabsController } from "./modules/previewCustomTabs.js";
 import {
   updateStatus,
   renderLoadResult,
@@ -127,6 +128,16 @@ const homeRuntime = {
   pendingModelCustomer: "",
   pendingModelRows: []
 };
+const previewCustomTabsController = createPreviewCustomTabsController({
+  storageKey: PREVIEW_CUSTOM_TABS_STORAGE_KEY,
+  getCustomers: () => window.CUSTOMERS || {},
+  rerenderCustomerPreview,
+  activatePreviewPane
+});
+const hydrateEditableCustomerCustomTabs = previewCustomTabsController.hydrate;
+const onAddPreviewCustomTab = previewCustomTabsController.onAdd;
+const onRemovePreviewCustomTab = previewCustomTabsController.onRemove;
+const onEditPreviewCustomTab = previewCustomTabsController.onEdit;
 
 function buildParseTarget(customerKey) {
   const fallback = SHARED_PARSE_FALLBACKS[customerKey] || {};
@@ -151,55 +162,6 @@ function getClgParseTarget() {
 
 function getHmgParseTarget() {
   return buildParseTarget("hmg");
-}
-
-// 【用途】讀取本機儲存的自訂頁籤設定（依客戶分組）
-function readStoredPreviewCustomTabs() {
-  try {
-    const raw = localStorage.getItem(PREVIEW_CUSTOM_TABS_STORAGE_KEY);
-    if (!raw) {
-      return {};
-    }
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (error) {
-    return {};
-  }
-}
-
-// 【用途】保存本機自訂頁籤設定
-function writeStoredPreviewCustomTabs(data) {
-  try {
-    localStorage.setItem(PREVIEW_CUSTOM_TABS_STORAGE_KEY, JSON.stringify(data || {}));
-  } catch (error) {
-    // ignore localStorage errors
-  }
-}
-
-// 【用途】把舊版自訂頁籤 HTML 安全轉為純文字，遷移時不把標籤插入頁面。
-function convertCustomTabHtmlToText(html) {
-  const documentValue = new DOMParser().parseFromString(String(html ?? ""), "text/html");
-  documentValue.body.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
-  return String(documentValue.body.textContent ?? "").trim();
-}
-
-// 【用途】將 localStorage 頁籤限制為結構化純文字欄位，移除舊版可執行 HTML。
-function normalizeStoredCustomTab(item) {
-  if (!item || typeof item !== "object") {
-    return null;
-  }
-  const id = String(item.id || item.key || item.tabId || "").trim();
-  const label = String(item.label || item.name || item.tabName || "").trim();
-  if (!id || !label) {
-    return null;
-  }
-  const explicitText = String(item.text || item.contentText || "").trim();
-  const legacyHtml = String(item.html || item.contentHtml || "");
-  return {
-    id,
-    label,
-    text: explicitText || convertCustomTabHtmlToText(legacyHtml)
-  };
 }
 
 function normalizePrintedNoticeEntry(entry) {
@@ -572,95 +534,6 @@ function buildPrintNotice(customerKey, workOrderLabel, workOrderValue) {
     workOrderValue: normalizedWorkOrderValue,
     checked: isPrintedNoticeChecked(normalizedCustomerKey, normalizedWorkOrderValue)
   };
-}
-
-// 【用途】取得客戶設定物件，若不存在則回傳 null
-function getCustomerProfileByKey(customerKey) {
-  const key = String(customerKey ?? "").trim();
-  if (!key) {
-    return null;
-  }
-  return window.CUSTOMERS?.[key] || null;
-}
-
-// 【用途】取得客戶的可編輯自訂頁籤陣列（存放在 extraPreviewTabs）
-function getEditableCustomerCustomTabs(customerKey) {
-  const profile = getCustomerProfileByKey(customerKey);
-  if (!profile) {
-    return [];
-  }
-  if (!Array.isArray(profile.extraPreviewTabs)) {
-    profile.extraPreviewTabs = [];
-  }
-  return profile.extraPreviewTabs;
-}
-
-// 【用途】將 raw id 轉成與 ui.js 相同的自訂頁籤 data-tab 格式
-function normalizeCustomTabPaneId(rawId, index = 0) {
-  const base = String(rawId ?? "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  const suffix = base || `tab-${index + 1}`;
-  return `custom-${suffix}`;
-}
-
-// 【用途】取得客戶固定自訂頁籤（previewCustomTabs）數量
-function getFixedPreviewCustomTabCount(customerKey) {
-  const profile = getCustomerProfileByKey(customerKey);
-  if (!profile) {
-    return 0;
-  }
-  return Array.isArray(profile.previewCustomTabs) ? profile.previewCustomTabs.length : 0;
-}
-
-// 【用途】依頁籤 pane id 反查可編輯自訂頁籤索引
-function findEditableCustomTabIndexByPaneId(customerKey, paneId) {
-  const key = String(customerKey ?? "").trim();
-  const targetPaneId = String(paneId ?? "").trim();
-  if (!key || !targetPaneId) {
-    return -1;
-  }
-  const tabs = getEditableCustomerCustomTabs(key);
-  if (!Array.isArray(tabs) || tabs.length === 0) {
-    return -1;
-  }
-  const fixedCount = getFixedPreviewCustomTabCount(key);
-  return tabs.findIndex((item, index) => {
-    const rawId = item?.id || item?.key || item?.tabId;
-    const normalizedPaneId = normalizeCustomTabPaneId(rawId, fixedCount + index);
-    return normalizedPaneId === targetPaneId;
-  });
-}
-
-// 【用途】把目前記憶體中的 extraPreviewTabs 寫回 localStorage
-function persistEditableCustomerCustomTabs(customerKey) {
-  const key = String(customerKey ?? "").trim();
-  if (!key) {
-    return;
-  }
-  const store = readStoredPreviewCustomTabs();
-  const tabs = getEditableCustomerCustomTabs(key);
-  store[key] = tabs;
-  writeStoredPreviewCustomTabs(store);
-}
-
-// 【用途】啟動時把 localStorage 自訂頁籤回填到客戶設定
-function hydrateEditableCustomerCustomTabs() {
-  const store = readStoredPreviewCustomTabs();
-  const keys = Object.keys(window.CUSTOMERS || {});
-  keys.forEach((key) => {
-    const profile = getCustomerProfileByKey(key);
-    if (!profile) {
-      return;
-    }
-    profile.extraPreviewTabs = Array.isArray(store[key])
-      ? store[key].map(normalizeStoredCustomTab).filter(Boolean)
-      : [];
-  });
-  // 啟動時立即覆寫舊格式，避免惡意 HTML 繼續留在 localStorage。
-  keys.forEach((key) => persistEditableCustomerCustomTabs(key));
 }
 
 function getSafeErrorMessage(error) {
@@ -1839,95 +1712,6 @@ async function rerenderCustomerPreview(customerKey) {
     ui.clgSearchInput.value = query;
     await performClgSearch();
   }
-}
-
-// 【用途】新增客戶自訂頁籤（先建立標題，內容改在頁籤內直接編輯）
-async function onAddPreviewCustomTab(customerKey) {
-  const key = String(customerKey ?? "").trim();
-  const profile = getCustomerProfileByKey(key);
-  if (!profile) {
-    return;
-  }
-  const labelInput = window.prompt("請輸入頁籤名稱（例如：備註）", "備註");
-  if (labelInput === null) {
-    return;
-  }
-  const label = String(labelInput).trim();
-  if (!label) {
-    window.alert("頁籤名稱不可為空。");
-    return;
-  }
-  const tabs = getEditableCustomerCustomTabs(key);
-  const fixedCount = getFixedPreviewCustomTabCount(key);
-  const newId = `user-${Date.now()}`;
-  tabs.push({
-    id: newId,
-    label,
-    text: ""
-  });
-  const newPaneId = normalizeCustomTabPaneId(newId, fixedCount + tabs.length - 1);
-  persistEditableCustomerCustomTabs(key);
-  await rerenderCustomerPreview(key);
-  activatePreviewPane(key, newPaneId);
-}
-
-// 【用途】移除客戶自訂頁籤
-async function onRemovePreviewCustomTab(customerKey, tabId, tabItemId) {
-  const key = String(customerKey ?? "").trim();
-  const targetTabId = String(tabId ?? "").trim();
-  const targetItemId = String(tabItemId ?? "").trim();
-  if (!key || !targetTabId) {
-    return;
-  }
-  const tabs = getEditableCustomerCustomTabs(key);
-  if (!Array.isArray(tabs) || tabs.length === 0) {
-    return;
-  }
-  const targetIndex = targetItemId
-    ? tabs.findIndex((item) => String(item?.id || item?.key || item?.tabId || "").trim() === targetItemId)
-    : findEditableCustomTabIndexByPaneId(key, targetTabId);
-  if (targetIndex < 0) {
-    return;
-  }
-  const nextTabs = tabs.filter((_, index) => index !== targetIndex);
-  const confirmed = window.confirm("確定移除此自訂頁籤？");
-  if (!confirmed) {
-    return;
-  }
-  const profile = getCustomerProfileByKey(key);
-  if (!profile) {
-    return;
-  }
-  profile.extraPreviewTabs = nextTabs;
-  persistEditableCustomerCustomTabs(key);
-  await rerenderCustomerPreview(key);
-}
-
-// 【用途】以純文字格式儲存自訂頁籤內容，避免可執行 HTML 進入 localStorage
-function onEditPreviewCustomTab(customerKey, tabId, tabItemId, textContent) {
-  const key = String(customerKey ?? "").trim();
-  const targetTabId = String(tabId ?? "").trim();
-  const targetItemId = String(tabItemId ?? "").trim();
-  if (!key || !targetTabId) {
-    return;
-  }
-  const tabs = getEditableCustomerCustomTabs(key);
-  if (!Array.isArray(tabs) || tabs.length === 0) {
-    return;
-  }
-  const targetIndex = targetItemId
-    ? tabs.findIndex((item) => String(item?.id || item?.key || item?.tabId || "").trim() === targetItemId)
-    : findEditableCustomTabIndexByPaneId(key, targetTabId);
-  if (targetIndex < 0) {
-    return;
-  }
-  tabs[targetIndex] = {
-    ...tabs[targetIndex],
-    text: String(textContent ?? ""),
-  };
-  delete tabs[targetIndex].html;
-  delete tabs[targetIndex].contentHtml;
-  persistEditableCustomerCustomTabs(key);
 }
 
 async function refreshSearchPreview(query, matchCount) {

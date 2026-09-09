@@ -1,6 +1,6 @@
 # SN-GENERATOR 後端代碼地圖 (Back-End Code Map)
 
-**Version:** 0.3.38
+**Version:** 0.3.39
 **Last Updated:** 2026-09-09
 
 ---
@@ -26,6 +26,8 @@ graph TD
 | `core/*` | - | App configuration and error handling |
 
 ## 3. API 端點完整映射 (Complete API Endpoint Map)
+
+除 `/api/health` 外，下列會執行 Excel、SQLite、檔案或同步匯出工作的 handler 均宣告為普通 `def`，由 FastAPI 自動排入 Thread Pool，避免凍結 Event Loop。`/api/health` 不執行 I/O，保留 `async def`。
 
 | # | Method | Path | Handler | Request Schema | Response | Service Method |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -124,3 +126,9 @@ Settings dataclass in `core/config.py`:
 - `backend/tests/test_p0_regressions.py`
 - 以 4 個各自持有 Lock、共用同一 SQLite 檔的服務實例並行保留 40 個區間（每段 5 筆），驗證 200 個流水號唯一且連續。
 - 驗證允許來源會取得 CORS response header、未列入來源不會取得，且 `CORS_ALLOWED_ORIGINS=*` 會被拒絕。
+
+## 12. P1 穩定性回歸測試 (P1 Stability Tests)
+
+- `backend/tests/test_p1_regressions.py`
+- 驗證 Excel、匯出、History、SN、Print Notice 等 10 條同步 I/O 路由皆不是 coroutine handler，確保進入 FastAPI Thread Pool。
+- 驗證純記憶體 `/api/health` 仍為 async handler。

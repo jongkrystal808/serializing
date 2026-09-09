@@ -11,7 +11,7 @@ router = APIRouter(prefix="/print-notice", tags=["print-notice"])
 
 
 @router.get("")
-async def list_print_notices():
+def list_print_notices():
     entries = print_notice_service.list_entries()
     return ok(
         {
@@ -22,7 +22,7 @@ async def list_print_notices():
 
 
 @router.post("/upsert")
-async def upsert_print_notice(payload: PrintNoticeUpsertRequest):
+def upsert_print_notice(payload: PrintNoticeUpsertRequest):
     entry = print_notice_service.upsert_entry(
         customer=payload.customer,
         customer_label=payload.customer_label,
@@ -38,7 +38,7 @@ async def upsert_print_notice(payload: PrintNoticeUpsertRequest):
 
 
 @router.post("/delete")
-async def delete_print_notice(payload: PrintNoticeDeleteRequest):
+def delete_print_notice(payload: PrintNoticeDeleteRequest):
     removed = print_notice_service.delete_entry(
         customer=payload.customer,
         workorder_value=payload.workorder_value,

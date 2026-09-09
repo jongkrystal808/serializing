@@ -9,7 +9,7 @@ router = APIRouter(prefix="/export", tags=["export"])
 
 
 @router.post("")
-async def export_excel(payload: ExportRequest):
+def export_excel(payload: ExportRequest):
     filename, content, mime = export_service.export(payload)
     ascii_filename = "".join(char if ord(char) < 128 and char not in {'"', "\\"} else "_" for char in filename)
     if not ascii_filename:
