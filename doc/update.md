@@ -1,10 +1,16 @@
 # Update History / 更新紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.42
+**Version:** 0.3.43
 **Last Updated:** 2026-09-09
 
 ---
+
+## v0.3.43 (2026-09-09)
+- refactor(ui): 移除 `app.js` 所有直接 `innerHTML` 讀寫，動態模板統一經 `dom.js` 的 DocumentFragment boundary 替換
+- fix(ui): 首頁預覽同步改為 clone DOM 節點，避免把既有內容序列化後再次解析
+- fix(security): Excel 檔名與例外訊息進入模板前使用 HTML 文字語境 encoder
+- test: 前端 regression 新增 `app.js` 禁止直接讀寫 `innerHTML` 的靜態防線；JavaScript syntax、前端 P1 與後端 10 項測試通過
 
 ## v0.3.42 (2026-09-09)
 - refactor(ui): Lunfei、BNG、CHG 成功預覽共用資料驅動 shell；模組模板統一經 DocumentFragment boundary 更新

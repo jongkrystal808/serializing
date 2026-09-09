@@ -1,7 +1,7 @@
 # Development Process Guide / 開發流程指南
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.42
+**Version:** 0.3.43
 **Last Updated:** 2026-09-09
 
 ---

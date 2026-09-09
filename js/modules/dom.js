@@ -11,3 +11,14 @@ export function replaceChildrenFromTrustedTemplate(target, trustedHtml) {
   template.innerHTML = String(trustedHtml ?? "");
   target.replaceChildren(template.content.cloneNode(true));
 }
+
+// 【用途】以節點 clone 複製既有面板，不經過 HTML 字串重新解析。
+export function cloneChildrenInto(target, source) {
+  if (!target) {
+    return;
+  }
+  const children = source
+    ? Array.from(source.childNodes, (node) => node.cloneNode(true))
+    : [];
+  target.replaceChildren(...children);
+}

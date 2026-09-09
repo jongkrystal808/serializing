@@ -1,6 +1,6 @@
 # SN-GENERATOR (序號產生器) 系統架構設計文件
 
-**Version:** 0.3.42
+**Version:** 0.3.43
 **Last Updated:** 2026-09-09
 
 ## 1. 系統架構總覽 (Architecture Overview)
@@ -198,6 +198,7 @@ SN-GENERATOR/
 - ADR-045: BNG 機種備註以語意 regex 解析空白、全形標點並排除版本號 (已落地)
 - ADR-046: HTML text 與 quoted attribute 採不同 encoder，禁止跨 script/style/URL 語境沿用 (已落地)
 - ADR-047: 重複客戶預覽改用資料驅動 shell，模組模板集中經 DocumentFragment boundary 替換 (已落地)
+- ADR-048: `app.js` 的動態模板一律經 `dom.js` 受控邊界替換；既有預覽同步以 DOM 節點 clone 取代 HTML 字串重解析 (已落地)
 
 ## 11. 錯誤處理 (Error Handling)
 

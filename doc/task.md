@@ -1,7 +1,7 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.42
+**Version:** 0.3.43
 **Last Updated:** 2026-09-09
 
 ---
@@ -36,12 +36,12 @@
 - [x] 集中驗證 CUSTOMERS registry 並移除模組對 `window.CUSTOMERS` 的直接依賴（完成：2026-09-09）
 - [x] `createUiRefs()` 加入必要 DOM fail-fast 檢查（完成：2026-09-09）
 - [x] localStorage 讀寫、容量與 JSON 解析失敗改為使用者可見通知（完成：2026-09-09）
-- [x] 模組層模板集中至 DocumentFragment boundary；`app.js` 隨後續控制器拆分持續遷移（完成：2026-09-09）
+- [x] 模組與 `app.js` 模板集中至 DocumentFragment boundary，預覽同步改用 DOM node clone（完成：2026-09-09）
 - [x] `homeController.js` 客戶 key 集中為不可變常數（完成：2026-09-09）
 - [x] BNG 機種／備註解析改用容錯 regex 並排除版本號（完成：2026-09-09）
 - [x] 新增 HTML attribute 專用 encoder 並明定禁止跨 script/style/URL context 使用（完成：2026-09-09）
 
-**Current Result:** 後端競態、阻塞 I/O 與安全修補完成；CSS 已降低特異性並改用主題變數／rem。前端新增 validated customer registry、DOM fail-fast、observable storage、語境化 encoder 與資料驅動預覽 shell；模組模板集中經 DocumentFragment boundary 更新。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端 P1 regression 通過。
+**Current Result:** 後端競態、阻塞 I/O 與安全修補完成；CSS 已降低特異性並改用主題變數／rem。前端新增 validated customer registry、DOM fail-fast、observable storage、語境化 encoder 與資料驅動預覽 shell；所有動態模板集中經 DocumentFragment boundary 更新。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端 P1 regression 通過。
 
 ---
 

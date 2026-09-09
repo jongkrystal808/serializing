@@ -48,6 +48,7 @@ import {
 import { createPreviewCustomTabsController } from "./modules/previewCustomTabs.js";
 import { getCustomerRegistry } from "./modules/customers.js";
 import { setStorageErrorHandler } from "./modules/storage.js";
+import { cloneChildrenInto, replaceChildrenFromTrustedTemplate } from "./modules/dom.js";
 import {
   updateStatus,
   renderLoadResult,
@@ -239,18 +240,22 @@ function renderHomePrintNoticeBoard() {
   }
   const entries = getActivePrintedNoticeEntries();
   if (entries.length === 0) {
-    ui.homePrintNoticeList.innerHTML = `<p class="home-print-notice-empty">目前沒有近 ${PRINT_NOTICE_BOARD_WINDOW_DAYS} 天已列印公告。</p>`;
+    replaceChildrenFromTrustedTemplate(
+      ui.homePrintNoticeList,
+      `<p class="home-print-notice-empty">目前沒有近 ${PRINT_NOTICE_BOARD_WINDOW_DAYS} 天已列印公告。</p>`
+    );
     return;
   }
-  ui.homePrintNoticeList.innerHTML = entries
-    .map((entry) => `
+  replaceChildrenFromTrustedTemplate(
+    ui.homePrintNoticeList,
+    entries.map((entry) => `
       <article class="home-print-notice-item" data-customer-key="${escapeHtml(entry.customerKey)}">
         <span class="home-print-notice-customer">${escapeHtml(entry.customerLabel)}</span>
         <span class="home-print-notice-date">${escapeHtml(formatPrintedNoticeDate(entry.createdAt))}</span>
         <p class="home-print-notice-main">${escapeHtml(entry.workOrderValue)}${escapeHtml(entry.workOrderLabel)}已列印</p>
       </article>
-    `)
-    .join("");
+    `).join("")
+  );
 }
 
 function getWeekRangeLabel(timestamp) {
@@ -334,11 +339,11 @@ function renderHomePrintHistoryPanel() {
     </div>
   `;
   if (entries.length === 0) {
-    ui.homePrintHistoryPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.homePrintHistoryPanel, `
       <h2>列印歷史</h2>
       ${toolbarHtml}
       <div class="error-box">目前沒有符合條件的列印歷史。</div>
-    `;
+    `);
     return;
   }
   const groupMap = new Map();
@@ -381,11 +386,11 @@ function renderHomePrintHistoryPanel() {
       `;
     })
     .join("");
-  ui.homePrintHistoryPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.homePrintHistoryPanel, `
     <h2>列印歷史</h2>
     ${toolbarHtml}
     ${weeksHtml}
-  `;
+  `);
 }
 
 function formatPrintedNoticeTime(timestamp) {
@@ -863,10 +868,10 @@ function resetDataForCustomerSwitch() {
   ui.chgHistoryPanel.hidden = true;
   ui.hmgHistoryPanel.hidden = true;
   ui.clgHistoryPanel.hidden = true;
-  ui.previewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.previewPanel, `
     <h2>預覽窗格</h2>
     <p>請先上傳共用 Excel，並輸入工單號後點擊「解析工單」。</p>
-  `;
+  `);
   setSearchEnabled(state.yingbangRowData.length > 0);
   setExportEnabled(false);
   ui.lunfeiSearchInput.disabled = state.lunfeiRowData.length === 0;
@@ -963,7 +968,10 @@ function mountBngReceiptPrintView(payload) {
   if (!ui.bngReceiptPrintRoot) {
     throw new Error("找不到超恩收據列印區塊。");
   }
-  ui.bngReceiptPrintRoot.innerHTML = renderBngReceiptPrintHtml(payload, escapeHtml);
+  replaceChildrenFromTrustedTemplate(
+    ui.bngReceiptPrintRoot,
+    renderBngReceiptPrintHtml(payload, escapeHtml)
+  );
   ui.bngReceiptPrintRoot.hidden = false;
   ui.bngReceiptPrintRoot.setAttribute("aria-hidden", "false");
   document.body.classList.add("printing-bng-receipt");
@@ -977,7 +985,7 @@ function cleanupBngReceiptPrintView() {
   }
   ui.bngReceiptPrintRoot.hidden = true;
   ui.bngReceiptPrintRoot.setAttribute("aria-hidden", "true");
-  ui.bngReceiptPrintRoot.innerHTML = "";
+  ui.bngReceiptPrintRoot.replaceChildren();
 }
 
 function onCopyError() {
@@ -1071,7 +1079,7 @@ function hideHmgSuggestPanel() {
     return;
   }
   ui.hmgSuggestPanel.hidden = true;
-  ui.hmgSuggestPanel.innerHTML = "";
+  ui.hmgSuggestPanel.replaceChildren();
 }
 
 function showHmgSuggestPanel(query, matchedRows) {
@@ -1092,11 +1100,11 @@ function showHmgSuggestPanel(query, matchedRows) {
     .join("");
   const hiddenCount = Math.max((matchedRows?.length || 0) - list.length, 0);
   const hiddenText = hiddenCount > 0 ? `<p class="clg-suggest-title">另有 ${hiddenCount} 筆未顯示，請縮小關鍵字。</p>` : "";
-  ui.hmgSuggestPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.hmgSuggestPanel, `
     <p class="clg-suggest-title">關鍵字「${escapeHtml(query)}」命中 ${matchedRows.length} 筆，請點選一筆：</p>
     <div class="clg-suggest-list">${optionsHtml}</div>
     ${hiddenText}
-  `;
+  `);
   ui.hmgSuggestPanel.hidden = false;
 }
 
@@ -1199,7 +1207,7 @@ function hideClgSuggestPanel() {
     return;
   }
   ui.clgSuggestPanel.hidden = true;
-  ui.clgSuggestPanel.innerHTML = "";
+  ui.clgSuggestPanel.replaceChildren();
 }
 
 function showClgSuggestPanel(query, matchedRows) {
@@ -1220,11 +1228,11 @@ function showClgSuggestPanel(query, matchedRows) {
     .join("");
   const hiddenCount = Math.max((matchedRows?.length || 0) - list.length, 0);
   const hiddenText = hiddenCount > 0 ? `<p class="clg-suggest-title">另有 ${hiddenCount} 筆未顯示，請縮小關鍵字。</p>` : "";
-  ui.clgSuggestPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.clgSuggestPanel, `
     <p class="clg-suggest-title">關鍵字「${escapeHtml(query)}」命中 ${matchedRows.length} 筆，請點選一筆：</p>
     <div class="clg-suggest-list">${optionsHtml}</div>
     ${hiddenText}
-  `;
+  `);
   ui.clgSuggestPanel.hidden = false;
 }
 
@@ -1416,7 +1424,11 @@ function syncHomePreviewPanel(customerKey) {
     return;
   }
   const sourcePanel = getPreviewPanelByCustomer(customerKey);
-  ui.homePreviewPanel.innerHTML = sourcePanel?.innerHTML || "<p>無可顯示的預覽資料。</p>";
+  if (sourcePanel) {
+    cloneChildrenInto(ui.homePreviewPanel, sourcePanel);
+  } else {
+    replaceChildrenFromTrustedTemplate(ui.homePreviewPanel, "<p>無可顯示的預覽資料。</p>");
+  }
   bindPreviewTabsIn(ui.homePreviewPanel);
   bindSheetCopyCellsIn(ui.homePreviewPanel, onCopyError);
   bindCopyButtonsIn(ui.homePreviewPanel, onCopyError);
@@ -2083,10 +2095,10 @@ async function performHmgSearch() {
     state.currentRow = null;
     state.currentQuery = query;
     updateHmgExportEnabled();
-    ui.hmgPreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.hmgPreviewPanel, `
       <h2>赫星 預覽窗格</h2>
       <p>關鍵字「${escapeHtml(query)}」命中 ${matchedRows.length} 筆，請從查詢區下方提示清單點選機種。</p>
-    `;
+    `);
     updateHmgStatus(`命中 ${matchedRows.length} 筆，請從下方提示清單選擇機種。`);
     return;
   }
@@ -2134,10 +2146,10 @@ async function performClgSearch() {
     state.currentRow = null;
     state.currentQuery = query;
     updateClgExportEnabledBySettings();
-    ui.clgPreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.clgPreviewPanel, `
       <h2>Cubepilot 預覽窗格</h2>
       <p>關鍵字「${escapeHtml(query)}」命中 ${matchedRows.length} 筆，請從查詢區下方提示清單點選機種。</p>
-    `;
+    `);
     updateClgStatus(`命中 ${matchedRows.length} 筆，請從下方提示清單選擇機種。`);
     return;
   }
@@ -2446,21 +2458,22 @@ async function processSharedExcelFile(file) {
     ui.chgHistoryPanel.hidden = true;
 
     renderLoadResult(ui, state.yingbangRowData, file.name);
-    ui.lunfeiPreviewPanel.innerHTML = `
+    const safeFileName = escapeHtml(file.name);
+    replaceChildrenFromTrustedTemplate(ui.lunfeiPreviewPanel, `
       <h2>倫飛預覽窗格</h2>
-      <p>來源檔案：${file.name}</p>
+      <p>來源檔案：${safeFileName}</p>
       <p>已載入倫飛出貨 ${state.lunfeiRowData.length} 筆資料。</p>
-    `;
-    ui.bngPreviewPanel.innerHTML = `
+    `);
+    replaceChildrenFromTrustedTemplate(ui.bngPreviewPanel, `
       <h2>超恩預覽窗格</h2>
-      <p>來源檔案：${file.name}</p>
+      <p>來源檔案：${safeFileName}</p>
       <p>已載入超恩出貨 ${state.bngRowData.length} 筆資料。</p>
-    `;
-    ui.chgPreviewPanel.innerHTML = `
+    `);
+    replaceChildrenFromTrustedTemplate(ui.chgPreviewPanel, `
       <h2>KOYA 預覽窗格</h2>
-      <p>來源檔案：${file.name}</p>
+      <p>來源檔案：${safeFileName}</p>
       <p>已載入 KOYA 出貨 ${state.chgRowData.length} 筆資料。</p>
-    `;
+    `);
 
     setSearchEnabled(state.yingbangRowData.length > 0);
     setExportEnabled(false);
@@ -2513,22 +2526,23 @@ async function processSharedExcelFile(file) {
     updateBngStatus(message, true);
     updateChgStatus(message, true);
 
-    ui.previewPanel.innerHTML = `
+    const safeErrorMessage = escapeHtml(getSafeErrorMessage(error));
+    replaceChildrenFromTrustedTemplate(ui.previewPanel, `
       <h2>預覽窗格</h2>
-      <div class="error-box">讀取共用 Excel 失敗：${getSafeErrorMessage(error)}</div>
-    `;
-    ui.lunfeiPreviewPanel.innerHTML = `
+      <div class="error-box">讀取共用 Excel 失敗：${safeErrorMessage}</div>
+    `);
+    replaceChildrenFromTrustedTemplate(ui.lunfeiPreviewPanel, `
       <h2>倫飛預覽窗格</h2>
-      <div class="error-box">讀取共用 Excel 失敗：${getSafeErrorMessage(error)}</div>
-    `;
-    ui.bngPreviewPanel.innerHTML = `
+      <div class="error-box">讀取共用 Excel 失敗：${safeErrorMessage}</div>
+    `);
+    replaceChildrenFromTrustedTemplate(ui.bngPreviewPanel, `
       <h2>超恩預覽窗格</h2>
-      <div class="error-box">讀取共用 Excel 失敗：${getSafeErrorMessage(error)}</div>
-    `;
-    ui.chgPreviewPanel.innerHTML = `
+      <div class="error-box">讀取共用 Excel 失敗：${safeErrorMessage}</div>
+    `);
+    replaceChildrenFromTrustedTemplate(ui.chgPreviewPanel, `
       <h2>KOYA 預覽窗格</h2>
-      <div class="error-box">讀取共用 Excel 失敗：${getSafeErrorMessage(error)}</div>
-    `;
+      <div class="error-box">讀取共用 Excel 失敗：${safeErrorMessage}</div>
+    `);
   } finally {
     setAllCustomerLoading(false);
   }
@@ -2557,11 +2571,11 @@ async function processHmgExcelFile(file) {
     ui.hmgSearchInput.disabled = state.hmgRowData.length === 0;
     ui.hmgQueryBtn.disabled = state.hmgRowData.length === 0;
     updateHmgExportEnabled();
-    ui.hmgPreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.hmgPreviewPanel, `
       <h2>赫星 預覽窗格</h2>
-      <p>來源檔案：${file.name}</p>
+      <p>來源檔案：${escapeHtml(file.name)}</p>
       <p>已載入赫星 ${state.hmgRowData.length} 筆資料。</p>
-    `;
+    `);
     updateHmgStatus(`已載入赫星 Excel：${file.name}（${state.hmgRowData.length} 筆）`);
   } catch (error) {
     state.hmgRowData = [];
@@ -2575,10 +2589,10 @@ async function processHmgExcelFile(file) {
     updateHmgExportEnabled();
     ui.hmgHistoryPanel.hidden = true;
     updateHmgStatus(`讀取失敗：${getSafeErrorMessage(error)}`, true);
-    ui.hmgPreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.hmgPreviewPanel, `
       <h2>赫星 預覽窗格</h2>
-      <div class="error-box">讀取赫星 Excel 失敗：${getSafeErrorMessage(error)}</div>
-    `;
+      <div class="error-box">讀取赫星 Excel 失敗：${escapeHtml(getSafeErrorMessage(error))}</div>
+    `);
   } finally {
     setHmgLoading(false);
   }
@@ -2607,11 +2621,11 @@ async function processClgExcelFile(file) {
     ui.clgSearchInput.disabled = state.clgRowData.length === 0;
     ui.clgQueryBtn.disabled = state.clgRowData.length === 0;
     updateClgExportEnabledBySettings();
-    ui.clgPreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.clgPreviewPanel, `
       <h2>Cubepilot 預覽窗格</h2>
-      <p>來源檔案：${file.name}</p>
+      <p>來源檔案：${escapeHtml(file.name)}</p>
       <p>已載入 Cubepilot ${state.clgRowData.length} 筆資料。</p>
-    `;
+    `);
     updateClgStatus(`已載入 Cubepilot Excel：${file.name}（${state.clgRowData.length} 筆）`);
   } catch (error) {
     state.clgRowData = [];
@@ -2625,10 +2639,10 @@ async function processClgExcelFile(file) {
     updateClgExportEnabledBySettings();
     ui.clgHistoryPanel.hidden = true;
     updateClgStatus(`讀取失敗：${getSafeErrorMessage(error)}`, true);
-    ui.clgPreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.clgPreviewPanel, `
       <h2>Cubepilot 預覽窗格</h2>
-      <div class="error-box">讀取 Cubepilot Excel 失敗：${getSafeErrorMessage(error)}</div>
-    `;
+      <div class="error-box">讀取 Cubepilot Excel 失敗：${escapeHtml(getSafeErrorMessage(error))}</div>
+    `);
   } finally {
     setClgLoading(false);
   }

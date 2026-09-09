@@ -1,6 +1,6 @@
 # SN-GENERATOR 前端代碼地圖 (Front-End Code Map)
 
-**Version:** 0.3.42
+**Version:** 0.3.43
 **Last Updated:** 2026-09-09
 
 ---
@@ -149,7 +149,7 @@ Major event bindings from `initEvents()` in `app.js` categorized by:
 
 - `bindSheetCopyCellsIn()` 在每個預覽 root 僅註冊一次 `click` listener，透過 `closest('.copyable-cell')` 處理目前及後續動態產生的所有儲存格；重複 bind 不會增加 listener。
 - 自訂頁籤的 localStorage、HTML-to-text 遷移、索引解析與 CRUD 已從 `app.js` 移至 `previewCustomTabs.js`，主檔由 3,571 行降至 3,355 行。
-- `app.js` 仍包含多客戶流程與匯出協調，後續拆分工作持續列於 T69，不視為完全結案。
+- `app.js` 仍包含多客戶流程與匯出協調，後續拆分工作持續列於 T69；本次只完成直接 HTML sink 收斂，不視為主檔拆分完全結案。
 
 ## 10. CSS 架構與響應式規則
 
@@ -163,5 +163,6 @@ Major event bindings from `initEvents()` in `app.js` categorized by:
 - `customers.js` 集中定義六客戶 key，並在模組初始化時驗證 `window.CUSTOMERS` 完整性；其他模組不直接讀取該全域。
 - `createUiRefs()` 對必要 DOM 執行 fail-fast 檢查，錯誤會列出缺少的 ref 名稱。
 - `storage.js` 將 localStorage 權限、配額及 JSON 損壞錯誤回報給首頁狀態列；handler 尚未註冊時會暫存錯誤，註冊後補送。
-- Lunfei、BNG、CHG 成功預覽共用 `renderCustomerSearchSuccessLayout()`；模組層模板透過 `dom.js` 的 DocumentFragment boundary 更新。`app.js` 既有模板隨 T69 控制器拆分持續遷移。
+- Lunfei、BNG、CHG 成功預覽共用 `renderCustomerSearchSuccessLayout()`；所有功能模組與 `app.js` 動態模板均透過 `dom.js` 的 DocumentFragment boundary 更新。
+- 首頁預覽同步使用 `cloneChildrenInto()` 複製既有 DOM 節點，不再讀取及重新解析 `innerHTML`；檔名與例外訊息在放入模板前先以文字語境 encoder 處理。
 - `escapeHtml()` 僅用於 HTML 文字，動態屬性改用 `escapeHtmlAttribute()`；兩者都不得用於 script、style 或 URL 語境。

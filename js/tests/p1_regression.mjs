@@ -166,6 +166,11 @@ const statusElement = {
 updateStatus({ status: statusElement }, "失敗", true);
 assert.equal(statusClasses.has("status-message"), true, "狀態更新不得清除語意 class");
 assert.equal(statusClasses.has("error"), true);
+updateStatus({ status: statusElement }, "MO 命中 2 筆", false, false, false, true);
+assert.equal(statusClasses.has("duplicate-hit"), true, "MO 重複命中提示應套用醒目樣式");
+
+assert.match(rendererSource, /renderDuplicateMoRows\(matchedRows\)/, "MO 命中兩筆時預覽應顯示兩筆來源資料");
+assert.match(homeControllerSource, /matchedRows\.length === 2/, "首頁應辨識 MO 恰好命中兩筆的情境");
 
 const moduleDirectory = new URL("../modules/", import.meta.url);
 const directInnerHtmlModules = readdirSync(moduleDirectory)
@@ -175,6 +180,18 @@ assert.deepEqual(
   directInnerHtmlModules,
   [],
   "功能模組不得直接寫入 innerHTML，模板解析只能位於 dom.js 的受控邊界"
+);
+
+const appSource = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+assert.doesNotMatch(
+  appSource,
+  /\.innerHTML\s*=/,
+  "app.js 不得繞過 dom.js 的受控模板邊界直接寫入 innerHTML"
+);
+assert.doesNotMatch(
+  appSource,
+  /\.innerHTML\b/,
+  "app.js 複製預覽內容時應 clone DOM 節點，不得重新解析 HTML 字串"
 );
 
 process.stdout.write("P1 frontend architecture, safety and CSS regression passed.\n");

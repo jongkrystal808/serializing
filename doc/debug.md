@@ -1,7 +1,7 @@
 # Debug Log / 錯誤紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.42
+**Version:** 0.3.43
 **Last Updated:** 2026-09-09
 
 ---
@@ -14,6 +14,20 @@
 
 ## ✅ Resolved Bugs
 
+### BUG-20260909-015 — app.js 動態 HTML sink 分散且預覽內容重解析
+
+**Severity:** P1 / Security & Maintainability
+
+**Affected:** `app.js`, `dom.js`, `p1_regression.mjs`
+
+**Root Cause:** 主流程仍直接寫入多個 `innerHTML` sink，首頁預覽同步更會讀取來源 `innerHTML` 後再解析；檔名與例外訊息插入部分模板前也未先做文字語境編碼。
+
+**Fix:** 所有主流程模板改經 `replaceChildrenFromTrustedTemplate()` 的單一 DocumentFragment boundary；預覽同步改用 `cloneChildrenInto()` 複製 DOM 節點；外部字串進入模板前先 `escapeHtml()`。
+
+**Verification:** JavaScript syntax 與前端 P1 regression 通過；靜態測試禁止 `app.js` 直接讀寫 `innerHTML`，全專案 JavaScript 僅 `dom.js` 保留模板解析 sink；後端 regression 10/10 通過。
+
+**Resolved:** 2026-09-09
+
 ### BUG-20260909-013 — 前端初始化、儲存與渲染邊界不明確
 
 **Severity:** P1 / Stability & Security
@@ -22,7 +36,7 @@
 
 **Root Cause:** 客戶設定透過未驗證全域隱式取得；必要 DOM 允許 null 延後失敗；localStorage 錯誤遭靜默吞掉；多個模組直接維護 `innerHTML` sink。
 
-**Fix:** 新增 validated customer registry、必要 DOM fail-fast、observable storage adapter，以及單一受控 `dom.js` DocumentFragment template boundary。模組不再直接寫入 `innerHTML`；狀態更新使用 `classList.toggle()` 保留語意 class；`app.js` 舊模板併入 T69 後續控制器拆分範圍。
+**Fix:** 新增 validated customer registry、必要 DOM fail-fast、observable storage adapter，以及單一受控 `dom.js` DocumentFragment template boundary。模組不再直接寫入 `innerHTML`；狀態更新使用 `classList.toggle()` 保留語意 class；`app.js` 的剩餘模板已於 BUG-015 完成收斂。
 
 **Verification:** regression 驗證缺少 CUSTOMERS、缺少 DOM、QuotaExceededError、損壞 JSON 均會明確失敗或通知，且 `js/modules` 只允許 `dom.js` 保留單一模板解析 sink。
 
