@@ -109,35 +109,32 @@ class HistoryService:
         record_text = str(record or "").strip()
 
         with self._lock, self._connect() as conn:
-            row = conn.execute(
-                """
-                SELECT last_serial
-                FROM serial_history
-                WHERE customer = ? AND history_key = ?
-                """,
-                (customer_key, history_key),
-            ).fetchone()
-            current = int(row[0]) if row else 0
-            next_value = current + increment
-
-            if row:
-                if increment > 0:
-                    conn.execute(
-                        """
-                        UPDATE serial_history
-                        SET last_serial = ?, updated_at = ?
-                        WHERE customer = ? AND history_key = ?
-                        """,
-                        (next_value, now, customer_key, history_key),
-                    )
-            elif increment > 0:
-                conn.execute(
+            # 流水號的建立、遞增與回讀必須由同一個 SQL 原子完成，才能涵蓋多 Worker。
+            if increment > 0:
+                row = conn.execute(
                     """
                     INSERT INTO serial_history (customer, history_key, last_serial, updated_at)
                     VALUES (?, ?, ?, ?)
+                    ON CONFLICT(customer, history_key) DO UPDATE SET
+                        last_serial = serial_history.last_serial + excluded.last_serial,
+                        updated_at = excluded.updated_at
+                    RETURNING last_serial
                     """,
-                    (customer_key, history_key, next_value, now),
-                )
+                    (customer_key, history_key, increment, now),
+                ).fetchone()
+                next_value = int(row[0])
+                current = next_value - increment
+            else:
+                row = conn.execute(
+                    """
+                    SELECT last_serial
+                    FROM serial_history
+                    WHERE customer = ? AND history_key = ?
+                    """,
+                    (customer_key, history_key),
+                ).fetchone()
+                current = int(row[0]) if row else 0
+                next_value = current
 
             if record_text:
                 conn.execute(
@@ -149,8 +146,7 @@ class HistoryService:
                 )
             conn.commit()
 
-        current_value = next_value if (row or increment > 0) else current
-        return {"previous": current, "current": current_value}
+        return {"previous": current, "current": next_value}
 
     def reset_entry(self, customer: str, key: str) -> bool:
         customer_key = self._normalize_customer(customer)

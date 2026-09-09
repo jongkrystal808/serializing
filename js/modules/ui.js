@@ -103,11 +103,29 @@ export function bindCustomTabActionsIn(rootElement, handlers = {}) {
   const editors = rootElement.querySelectorAll('[data-action="edit-custom-tab"]');
   if (typeof handlers.onEdit === "function") {
     editors.forEach((editor) => {
+      // 僅允許純文字貼入，避免貼上的 HTML 在 contenteditable 中立即執行事件處理器。
+      editor.addEventListener("paste", (event) => {
+        event.preventDefault();
+        const text = event.clipboardData?.getData("text/plain") ?? "";
+        const selection = window.getSelection();
+        if (!selection || selection.rangeCount === 0) {
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const textNode = document.createTextNode(text);
+        range.insertNode(textNode);
+        range.setStartAfter(textNode);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+      editor.addEventListener("drop", (event) => event.preventDefault());
       editor.addEventListener("blur", () => {
         const customerKey = String(editor.getAttribute("data-customer-key") ?? "").trim();
         const tabId = String(editor.getAttribute("data-tab-id") ?? "").trim();
         const tabItemId = String(editor.getAttribute("data-tab-item-id") ?? "").trim();
-        handlers.onEdit(customerKey, tabId, tabItemId, editor.innerHTML);
+        handlers.onEdit(customerKey, tabId, tabItemId, editor.innerText);
       });
     });
   }

@@ -176,6 +176,32 @@ function writeStoredPreviewCustomTabs(data) {
   }
 }
 
+// 【用途】把舊版自訂頁籤 HTML 安全轉為純文字，遷移時不把標籤插入頁面。
+function convertCustomTabHtmlToText(html) {
+  const documentValue = new DOMParser().parseFromString(String(html ?? ""), "text/html");
+  documentValue.body.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
+  return String(documentValue.body.textContent ?? "").trim();
+}
+
+// 【用途】將 localStorage 頁籤限制為結構化純文字欄位，移除舊版可執行 HTML。
+function normalizeStoredCustomTab(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  const id = String(item.id || item.key || item.tabId || "").trim();
+  const label = String(item.label || item.name || item.tabName || "").trim();
+  if (!id || !label) {
+    return null;
+  }
+  const explicitText = String(item.text || item.contentText || "").trim();
+  const legacyHtml = String(item.html || item.contentHtml || "");
+  return {
+    id,
+    label,
+    text: explicitText || convertCustomTabHtmlToText(legacyHtml)
+  };
+}
+
 function normalizePrintedNoticeEntry(entry) {
   if (!entry || typeof entry !== "object") {
     return null;
@@ -629,8 +655,12 @@ function hydrateEditableCustomerCustomTabs() {
     if (!profile) {
       return;
     }
-    profile.extraPreviewTabs = Array.isArray(store[key]) ? store[key] : [];
+    profile.extraPreviewTabs = Array.isArray(store[key])
+      ? store[key].map(normalizeStoredCustomTab).filter(Boolean)
+      : [];
   });
+  // 啟動時立即覆寫舊格式，避免惡意 HTML 繼續留在 localStorage。
+  keys.forEach((key) => persistEditableCustomerCustomTabs(key));
 }
 
 function getSafeErrorMessage(error) {
@@ -1833,7 +1863,7 @@ async function onAddPreviewCustomTab(customerKey) {
   tabs.push({
     id: newId,
     label,
-    html: ""
+    text: ""
   });
   const newPaneId = normalizeCustomTabPaneId(newId, fixedCount + tabs.length - 1);
   persistEditableCustomerCustomTabs(key);
@@ -1873,8 +1903,8 @@ async function onRemovePreviewCustomTab(customerKey, tabId, tabItemId) {
   await rerenderCustomerPreview(key);
 }
 
-// 【用途】儲存自訂頁籤內容區的即時編輯結果（HTML）
-function onEditPreviewCustomTab(customerKey, tabId, tabItemId, htmlContent) {
+// 【用途】以純文字格式儲存自訂頁籤內容，避免可執行 HTML 進入 localStorage
+function onEditPreviewCustomTab(customerKey, tabId, tabItemId, textContent) {
   const key = String(customerKey ?? "").trim();
   const targetTabId = String(tabId ?? "").trim();
   const targetItemId = String(tabItemId ?? "").trim();
@@ -1893,8 +1923,10 @@ function onEditPreviewCustomTab(customerKey, tabId, tabItemId, htmlContent) {
   }
   tabs[targetIndex] = {
     ...tabs[targetIndex],
-    html: String(htmlContent ?? "")
+    text: String(textContent ?? ""),
   };
+  delete tabs[targetIndex].html;
+  delete tabs[targetIndex].contentHtml;
   persistEditableCustomerCustomTabs(key);
 }
 

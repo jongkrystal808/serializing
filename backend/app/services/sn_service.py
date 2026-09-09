@@ -63,31 +63,31 @@ class SnService:
         if not po:
             raise AppError("營邦規則需要 purchase_order", code="MISSING_PURCHASE_ORDER")
 
-        previous = history_service.get_last_serial("yingbang", key)
-        sn_list = [
-            f"{po}1{str(previous + index + 1).zfill(4)}"
-            for index in range(qty)
-        ]
         result = history_service.upsert_entry(
             customer="yingbang",
             key=key,
             increment=qty,
         )
+        previous = result["previous"]
+        sn_list = [
+            f"{po}1{str(previous + index + 1).zfill(4)}"
+            for index in range(qty)
+        ]
         return sn_list, previous, result["current"]
 
     def _generate_lunfei(self, key: str, qty: int, week_key: str) -> tuple[List[str], int, int]:
         normalized_week_key = self._resolve_week_key(week_key)
-        previous = history_service.get_last_serial("lunfei", normalized_week_key)
-        week_num = normalized_week_key.split("-W")[-1]
-        sn_list = [
-            f"106{week_num}62{str(previous + index + 1).zfill(5)}"
-            for index in range(qty)
-        ]
         result = history_service.upsert_entry(
             customer="lunfei",
             key=normalized_week_key,
             increment=qty,
         )
+        previous = result["previous"]
+        week_num = normalized_week_key.split("-W")[-1]
+        sn_list = [
+            f"106{week_num}62{str(previous + index + 1).zfill(5)}"
+            for index in range(qty)
+        ]
         return sn_list, previous, result["current"]
 
     def _accept_external_serials(
@@ -104,12 +104,12 @@ class SnService:
                 code="INVALID_PROVIDED_SERIALS",
                 details={"expected": qty, "actual": len(serials)},
             )
-        previous = history_service.get_last_serial(customer, key)
         result = history_service.upsert_entry(
             customer=customer,
             key=key,
             increment=qty,
         )
+        previous = result["previous"]
         return serials, previous, result["current"]
 
     @staticmethod

@@ -1,5 +1,18 @@
+import os
 from dataclasses import dataclass, field
 from typing import Dict, List
+
+
+def _read_cors_allowed_origins() -> tuple[str, ...]:
+    """從環境變數讀取明確允許的前端來源。"""
+    raw_value = os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:8080,http://127.0.0.1:8080",
+    )
+    origins = tuple(origin.strip() for origin in raw_value.split(",") if origin.strip())
+    if "*" in origins:
+        raise ValueError("CORS_ALLOWED_ORIGINS 不可包含 *；請明確列出允許的來源")
+    return origins
 
 
 @dataclass(frozen=True)
@@ -17,6 +30,7 @@ class Settings:
     api_prefix: str = "/api"
     db_path: str = "backend/data/sn_generator.db"
     allowed_customers: tuple[str, ...] = ("yingbang", "lunfei", "bng", "chg", "hmg", "clg")
+    cors_allowed_origins: tuple[str, ...] = field(default_factory=_read_cors_allowed_origins)
 
     default_excel: Dict[str, CustomerFileConfig] = field(default_factory=lambda: {
         "yingbang": CustomerFileConfig(

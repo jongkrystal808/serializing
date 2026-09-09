@@ -85,6 +85,13 @@ function normalizeCustomTabId(rawId, index) {
   return `custom-${suffix}`;
 }
 
+// 【用途】將設定中的舊版 HTML 轉成不可執行的純文字內容。
+function customTabHtmlToText(value) {
+  const parsed = new DOMParser().parseFromString(String(value ?? ""), "text/html");
+  parsed.body.querySelectorAll("br").forEach((node) => node.replaceWith("\n"));
+  return String(parsed.body.textContent ?? "").trim();
+}
+
 function getConfiguredPreviewTabs(customerKey) {
   const key = String(customerKey ?? "").trim();
   const profile = window.CUSTOMERS?.[key] || {};
@@ -104,7 +111,7 @@ function getConfiguredPreviewTabs(customerKey) {
     }
     const label = String(item.label || item.name || item.tabName || `自訂頁籤${index + 1}`).trim();
     const html = String(item.html || item.contentHtml || "").trim();
-    const text = String(item.text || item.contentText || "").trim();
+    const text = String(item.text || item.contentText || "").trim() || customTabHtmlToText(html);
     if (!label || (!html && !text)) {
       return;
     }
@@ -112,7 +119,6 @@ function getConfiguredPreviewTabs(customerKey) {
     tabs.push({
       tabId,
       label,
-      html,
       text,
       removable: false
     });
@@ -127,7 +133,6 @@ function getConfiguredPreviewTabs(customerKey) {
       return;
     }
     const label = String(item.label || item.name || item.tabName || `自訂頁籤${index + 1}`).trim();
-    const html = String(item.html || item.contentHtml || "").trim();
     const text = String(item.text || item.contentText || "").trim();
     if (!label) {
       return;
@@ -136,7 +141,6 @@ function getConfiguredPreviewTabs(customerKey) {
     tabs.push({
       tabId,
       label,
-      html,
       text,
       itemId: String(item.id || item.key || item.tabId || "").trim(),
       removable: true
@@ -153,8 +157,7 @@ function getConfiguredPreviewTabs(customerKey) {
       tabs.push({
         tabId: legacyTabId,
         label: String(profile.previewNoteTabLabel || "備註").trim() || "備註",
-        html: legacyHtml,
-        text: legacyText,
+        text: legacyText || customTabHtmlToText(legacyHtml),
         removable: false
       });
     }
@@ -186,9 +189,9 @@ function renderCustomPreviewPanes(customerKey, customTabs) {
   }
   return customTabs
     .map((tab) => {
-      const htmlContent = tab.html
-        ? tab.html
-        : (tab.text ? `<div class="preview-custom-text">${escapeHtml(tab.text).replace(/\n/g, "<br>")}</div>` : "");
+      const textContent = tab.text
+        ? `<div class="preview-custom-text">${escapeHtml(tab.text).replace(/\n/g, "<br>")}</div>`
+        : "";
       return `
         <div class="preview-pane preview-pane-custom" data-pane="${escapeHtml(tab.tabId)}">
           ${tab.removable ? `<div class="preview-custom-actions">
@@ -204,14 +207,14 @@ function renderCustomPreviewPanes(customerKey, customTabs) {
           ${tab.removable
             ? `<div
                 class="preview-custom-editor"
-                contenteditable="true"
+                contenteditable="plaintext-only"
                 data-action="edit-custom-tab"
                 data-customer-key="${escapeHtml(customerKey)}"
                 data-tab-id="${escapeHtml(tab.tabId)}"
                 data-tab-item-id="${escapeHtml(tab.itemId || "")}"
                 data-placeholder="請在這裡編輯備註內容"
-              >${htmlContent}</div>`
-            : htmlContent}
+              >${textContent}</div>`
+            : textContent}
         </div>
       `;
     })
