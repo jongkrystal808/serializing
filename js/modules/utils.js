@@ -5,6 +5,7 @@ export function normalizeText(value) {
     .toLowerCase();
 }
 
+// 【用途】編碼 HTML 文字節點；不得用於 script/style/URL 等其他語境。
 export function escapeHtml(value) {
   return String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -12,6 +13,14 @@ export function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+// 【用途】嚴格編碼 HTML 屬性值，並要求呼叫端仍以引號包住屬性。
+export function escapeHtmlAttribute(value) {
+  return String(value ?? "").replace(/[&<>"'`=\u0000-\u001f\u007f]/g, (character) => {
+    const codePoint = character.codePointAt(0).toString(16).toUpperCase();
+    return `&#x${codePoint};`;
+  });
 }
 
 export function parseArrow(cellValue) {

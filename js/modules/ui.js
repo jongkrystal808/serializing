@@ -1,6 +1,7 @@
 import { CONFIG } from "../config.js";
 import { escapeHtml } from "./utils.js";
 import { renderTitleWithHelp } from "./uiPreviewRenderers.js";
+import { replaceChildrenFromTrustedTemplate } from "./dom.js";
 
 export {
   copyTextToClipboard,
@@ -31,25 +32,23 @@ export {
   renderClgSearchSuccess
 } from "./uiPreviewRenderers.js";
 
-export function updateStatus(ui, message, isError = false, isLoading = false) {
-  ui.status.textContent = message;
-  if (isError) {
-    ui.status.className = "error";
+export function updateStatus(ui, message, isError = false, isLoading = false, isSuccess = false) {
+  const statusElement = ui?.status;
+  if (!statusElement) {
     return;
   }
-  if (isLoading) {
-    ui.status.className = "loading";
-    return;
-  }
-  ui.status.className = "";
+  statusElement.textContent = message;
+  statusElement.classList.toggle("error", Boolean(isError));
+  statusElement.classList.toggle("loading", !isError && Boolean(isLoading));
+  statusElement.classList.toggle("success", !isError && !isLoading && Boolean(isSuccess));
 }
 
 export function renderLoadResult(ui, rows, fileName) {
-  ui.previewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.previewPanel, `
     ${renderTitleWithHelp("預覽窗格", "preview-panel")}
     <p>來源檔案：${fileName}</p>
     <p>已載入 ${rows.length} 筆資料（工作表：${CONFIG.SHEET_NAME}）。</p>
-  `;
+  `);
 }
 
 export function bindPreviewTabs(ui) {
@@ -193,5 +192,5 @@ export function updateClgPlannedSerialPreviewIn(ui, plannedSerialPreview) {
   if (!root) {
     return;
   }
-  root.innerHTML = renderClgPlannedSerialPreview(plannedSerialPreview);
+  replaceChildrenFromTrustedTemplate(root, renderClgPlannedSerialPreview(plannedSerialPreview));
 }

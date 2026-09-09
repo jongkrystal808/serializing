@@ -12,19 +12,19 @@ export function getRowValueByHeaderCandidates(row, headers) {
   return "";
 }
 
-function splitBngModelAndRemark(modelValue) {
+// 【用途】依「編號備註」語意拆分 BNG 機種與備註，容許多種空白與全形標點。
+export function splitBngModelAndRemark(modelValue) {
   const text = String(modelValue ?? "").trim();
-  const marker = " 1.";
-  const markerIndex = text.indexOf(marker);
-  if (markerIndex < 0) {
+  const match = text.match(/^(.*?)\s+(1[.．、](?:\s+|(?=\p{Script=Han}))[\s\S]*)$/u);
+  if (!match) {
     return {
       model: text,
       remark: ""
     };
   }
   return {
-    model: text.slice(0, markerIndex).trim(),
-    remark: text.slice(markerIndex).trim()
+    model: match[1].trim(),
+    remark: match[2].trim()
   };
 }
 

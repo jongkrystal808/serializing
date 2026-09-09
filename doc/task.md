@@ -1,7 +1,7 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.41
+**Version:** 0.3.42
 **Last Updated:** 2026-09-09
 
 ---
@@ -32,8 +32,16 @@
 - [x] 將 `main.css` 的 ID selector 改為語意 class（完成：2026-09-09）
 - [x] 六客戶首頁主題改由 CSS Custom Property 驅動（完成：2026-09-09）
 - [x] 版面、間距與字級的固定 px 改為 rem，保留像素邊線等合理例外（完成：2026-09-09）
+- [x] Lunfei／BNG／CHG 成功預覽抽成資料驅動共用 shell（完成：2026-09-09）
+- [x] 集中驗證 CUSTOMERS registry 並移除模組對 `window.CUSTOMERS` 的直接依賴（完成：2026-09-09）
+- [x] `createUiRefs()` 加入必要 DOM fail-fast 檢查（完成：2026-09-09）
+- [x] localStorage 讀寫、容量與 JSON 解析失敗改為使用者可見通知（完成：2026-09-09）
+- [x] 模組層模板集中至 DocumentFragment boundary；`app.js` 隨後續控制器拆分持續遷移（完成：2026-09-09）
+- [x] `homeController.js` 客戶 key 集中為不可變常數（完成：2026-09-09）
+- [x] BNG 機種／備註解析改用容錯 regex 並排除版本號（完成：2026-09-09）
+- [x] 新增 HTML attribute 專用 encoder 並明定禁止跨 script/style/URL context 使用（完成：2026-09-09）
 
-**Current Result:** 阻塞 I/O 已交由 FastAPI Thread Pool；大表格每個預覽 root 固定一個儲存格 listener；`app.js` 由 3,571 行降至 3,355 行。500 錯誤、Excel 上傳及下載標頭安全修補完成。CSS 已移除 ID selector、統一六客戶主題變數，且響應式尺寸改用 rem。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端 P1 regression 通過。
+**Current Result:** 後端競態、阻塞 I/O 與安全修補完成；CSS 已降低特異性並改用主題變數／rem。前端新增 validated customer registry、DOM fail-fast、observable storage、語境化 encoder 與資料驅動預覽 shell；模組模板集中經 DocumentFragment boundary 更新。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端 P1 regression 通過。
 
 ---
 

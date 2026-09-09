@@ -46,6 +46,8 @@ import {
   renderBngReceiptPrintHtml
 } from "./modules/bngReceipt.js";
 import { createPreviewCustomTabsController } from "./modules/previewCustomTabs.js";
+import { getCustomerRegistry } from "./modules/customers.js";
+import { setStorageErrorHandler } from "./modules/storage.js";
 import {
   updateStatus,
   renderLoadResult,
@@ -78,6 +80,8 @@ import {
 } from "./modules/ui.js";
 
 const ui = createUiRefs();
+const customers = getCustomerRegistry();
+setStorageErrorHandler(({ message }) => updateHomeStatus(message, true));
 const SHARED_PARSE_FALLBACKS = {
   yingbang: { sheetName: "營邦出貨", parseRules: ["arrow"] },
   lunfei: { sheetName: "倫飛出貨", parseRules: ["arrow"] },
@@ -130,7 +134,7 @@ const homeRuntime = {
 };
 const previewCustomTabsController = createPreviewCustomTabsController({
   storageKey: PREVIEW_CUSTOM_TABS_STORAGE_KEY,
-  getCustomers: () => window.CUSTOMERS || {},
+  getCustomers: () => customers,
   rerenderCustomerPreview,
   activatePreviewPane
 });
@@ -141,7 +145,7 @@ const onEditPreviewCustomTab = previewCustomTabsController.onEdit;
 
 function buildParseTarget(customerKey) {
   const fallback = SHARED_PARSE_FALLBACKS[customerKey] || {};
-  const profile = window.CUSTOMERS?.[customerKey] || {};
+  const profile = customers[customerKey] || {};
   const parseRules = Array.isArray(profile.parseRules) && profile.parseRules.length > 0
     ? profile.parseRules
     : (fallback.parseRules || ["trim"]);
@@ -659,16 +663,7 @@ function setLoading(isLoading, message = "") {
 }
 
 function updateLunfeiStatus(message, isError = false, isLoading = false) {
-  ui.lunfeiStatus.textContent = message;
-  if (isError) {
-    ui.lunfeiStatus.className = "error";
-    return;
-  }
-  if (isLoading) {
-    ui.lunfeiStatus.className = "loading";
-    return;
-  }
-  ui.lunfeiStatus.className = "";
+  updateStatus({ status: ui.lunfeiStatus }, message, isError, isLoading);
 }
 
 function setLunfeiLoading(isLoading, message = "") {
@@ -684,16 +679,7 @@ function setLunfeiLoading(isLoading, message = "") {
 }
 
 function updateBngStatus(message, isError = false, isLoading = false) {
-  ui.bngStatus.textContent = message;
-  if (isError) {
-    ui.bngStatus.className = "error";
-    return;
-  }
-  if (isLoading) {
-    ui.bngStatus.className = "loading";
-    return;
-  }
-  ui.bngStatus.className = "";
+  updateStatus({ status: ui.bngStatus }, message, isError, isLoading);
 }
 
 function setBngLoading(isLoading, message = "") {
@@ -718,16 +704,7 @@ function setBngPrintEnabled(enabled) {
 }
 
 function updateChgStatus(message, isError = false, isLoading = false) {
-  ui.chgStatus.textContent = message;
-  if (isError) {
-    ui.chgStatus.className = "error";
-    return;
-  }
-  if (isLoading) {
-    ui.chgStatus.className = "loading";
-    return;
-  }
-  ui.chgStatus.className = "";
+  updateStatus({ status: ui.chgStatus }, message, isError, isLoading);
 }
 
 function setChgLoading(isLoading, message = "") {
@@ -743,16 +720,7 @@ function setChgLoading(isLoading, message = "") {
 }
 
 function updateHmgStatus(message, isError = false, isLoading = false) {
-  ui.hmgStatus.textContent = message;
-  if (isError) {
-    ui.hmgStatus.className = "error";
-    return;
-  }
-  if (isLoading) {
-    ui.hmgStatus.className = "loading";
-    return;
-  }
-  ui.hmgStatus.className = "";
+  updateStatus({ status: ui.hmgStatus }, message, isError, isLoading);
 }
 
 function setHmgLoading(isLoading, message = "") {
@@ -771,16 +739,7 @@ function setHmgLoading(isLoading, message = "") {
 }
 
 function updateClgStatus(message, isError = false, isLoading = false) {
-  ui.clgStatus.textContent = message;
-  if (isError) {
-    ui.clgStatus.className = "error";
-    return;
-  }
-  if (isLoading) {
-    ui.clgStatus.className = "loading";
-    return;
-  }
-  ui.clgStatus.className = "";
+  updateStatus({ status: ui.clgStatus }, message, isError, isLoading);
 }
 
 function setClgLoading(isLoading, message = "") {
@@ -804,23 +763,7 @@ function setClgLoading(isLoading, message = "") {
 
 // 【用途】更新首頁狀態文字，供單一首頁模式顯示查詢/匯出結果
 function updateHomeStatus(message, isError = false, isLoading = false, isSuccess = false) {
-  if (!ui.homeStatus) {
-    return;
-  }
-  ui.homeStatus.textContent = message;
-  if (isError) {
-    ui.homeStatus.className = "error";
-    return;
-  }
-  if (isLoading) {
-    ui.homeStatus.className = "loading";
-    return;
-  }
-  if (isSuccess) {
-    ui.homeStatus.className = "success";
-    return;
-  }
-  ui.homeStatus.className = "";
+  updateStatus({ status: ui.homeStatus }, message, isError, isLoading, isSuccess);
 }
 
 // 【用途】控制首頁載入狀態與查詢按鈕可用性

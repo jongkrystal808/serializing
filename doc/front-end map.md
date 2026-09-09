@@ -1,6 +1,6 @@
 # SN-GENERATOR 前端代碼地圖 (Front-End Code Map)
 
-**Version:** 0.3.41
+**Version:** 0.3.42
 **Last Updated:** 2026-09-09
 
 ---
@@ -63,6 +63,9 @@ graph TD
 | `uiHistory.js` | 2KB | - | History table renderer + reset button bindings | - |
 | `uiPreviewRenderers.js` | 32KB | 914 | 6-customer preview renderers, escaped custom-tab rendering and legacy HTML-to-text conversion | - |
 | `customerColumns.js` | 1KB | - | Customer-specific column resolver with alias matching | - |
+| `customers.js` | - | - | Validated `window.CUSTOMERS` registry、customer key/order constants | `CUSTOMER_KEYS`, `getCustomerRegistry` |
+| `dom.js` | - | - | Controlled template parsing and DocumentFragment replacement boundary | `replaceChildrenFromTrustedTemplate` |
+| `storage.js` | - | - | Observable localStorage and JSON adapter | read/write helpers, `setStorageErrorHandler` |
 | `utils.js` | 1KB | - | `normalizeText`, `escapeHtml`, `parseArrow`, `normalizeRangeText` | - |
 | `styles/main.css` | 20KB | - | Layout, themes, tables, cards, tabs, print styles, RWD | - |
 
@@ -154,3 +157,11 @@ Major event bindings from `initEvents()` in `app.js` categorized by:
 - 六客戶主題 class 只設定 `--home-theme-accent`，共用 surface 與 status 規則統一讀取該變數，不再為每個客戶複製相同宣告。
 - 版面寬高、間距、字級與 mobile breakpoint 使用 `rem`；只在 1px/2px 邊線、outline、inset shadow 與 999px 膠囊圓角保留像素值。
 - `js/tests/p1_regression.mjs` 會阻止 ID selector、重複主題結構及新的固定版面 px 值回歸。
+
+## 11. 初始化、儲存與安全渲染
+
+- `customers.js` 集中定義六客戶 key，並在模組初始化時驗證 `window.CUSTOMERS` 完整性；其他模組不直接讀取該全域。
+- `createUiRefs()` 對必要 DOM 執行 fail-fast 檢查，錯誤會列出缺少的 ref 名稱。
+- `storage.js` 將 localStorage 權限、配額及 JSON 損壞錯誤回報給首頁狀態列；handler 尚未註冊時會暫存錯誤，註冊後補送。
+- Lunfei、BNG、CHG 成功預覽共用 `renderCustomerSearchSuccessLayout()`；模組層模板透過 `dom.js` 的 DocumentFragment boundary 更新。`app.js` 既有模板隨 T69 控制器拆分持續遷移。
+- `escapeHtml()` 僅用於 HTML 文字，動態屬性改用 `escapeHtmlAttribute()`；兩者都不得用於 script、style 或 URL 語境。

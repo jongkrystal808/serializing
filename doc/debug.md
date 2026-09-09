@@ -1,7 +1,7 @@
 # Debug Log / 錯誤紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.41
+**Version:** 0.3.42
 **Last Updated:** 2026-09-09
 
 ---
@@ -13,6 +13,34 @@
 ---
 
 ## ✅ Resolved Bugs
+
+### BUG-20260909-013 — 前端初始化、儲存與渲染邊界不明確
+
+**Severity:** P1 / Stability & Security
+
+**Affected:** `config.js`, `state.js`, `customerColumns.js`, `previewCustomTabs.js`, `ui*.js`, `homeController.js`
+
+**Root Cause:** 客戶設定透過未驗證全域隱式取得；必要 DOM 允許 null 延後失敗；localStorage 錯誤遭靜默吞掉；多個模組直接維護 `innerHTML` sink。
+
+**Fix:** 新增 validated customer registry、必要 DOM fail-fast、observable storage adapter，以及單一受控 `dom.js` DocumentFragment template boundary。模組不再直接寫入 `innerHTML`；狀態更新使用 `classList.toggle()` 保留語意 class；`app.js` 舊模板併入 T69 後續控制器拆分範圍。
+
+**Verification:** regression 驗證缺少 CUSTOMERS、缺少 DOM、QuotaExceededError、損壞 JSON 均會明確失敗或通知，且 `js/modules` 只允許 `dom.js` 保留單一模板解析 sink。
+
+**Resolved milestone:** 2026-09-09
+
+### BUG-20260909-014 — 預覽 WET、客戶 magic strings 與 BNG 脆弱解析
+
+**Severity:** P2 / Maintainability
+
+**Affected:** `uiPreviewRenderers.js`, `homeController.js`, `bngReceipt.js`, `utils.js`
+
+**Root Cause:** 三客戶成功預覽重複相同 shell；home controller 散落客戶 key literal；BNG 依固定 `" 1."` index 分割；單一 HTML encoder 未表達輸出語境。
+
+**Fix:** 三客戶改用 `renderCustomerSearchSuccessLayout()`；客戶 key 集中至 `CUSTOMER_KEYS`；BNG parser 支援彈性空白、半／全形標點並避免把 `1.2` 當備註；新增 quoted attribute encoder。
+
+**Verification:** regression 靜態驗證三個 renderer 使用共用元件且 homeController 無客戶字串 literal，並涵蓋 BNG 格式變體與 attribute 控制字元。
+
+**Resolved:** 2026-09-09
 
 ### BUG-20260909-010 — CSS ID selector 造成高特異性
 

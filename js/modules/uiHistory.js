@@ -1,4 +1,5 @@
-import { escapeHtml } from "./utils.js";
+import { escapeHtml, escapeHtmlAttribute } from "./utils.js";
+import { replaceChildrenFromTrustedTemplate } from "./dom.js";
 
 export function renderSerialHistoryTableIn(panelElement, entries, keyLabel = "採單/週別 key") {
   if (!panelElement) {
@@ -6,10 +7,10 @@ export function renderSerialHistoryTableIn(panelElement, entries, keyLabel = "�
   }
 
   if (!Array.isArray(entries) || entries.length === 0) {
-    panelElement.innerHTML = `
+    replaceChildrenFromTrustedTemplate(panelElement, `
       <h2>歷史記憶</h2>
       <div class="error-box">目前沒有可顯示的歷史資料。</div>
-    `;
+    `);
     return;
   }
 
@@ -24,13 +25,13 @@ export function renderSerialHistoryTableIn(panelElement, entries, keyLabel = "�
         <tr>
           <td>${escapeHtml(item.key)}</td>
           <td>${escapeHtml(usedSerialText)}</td>
-          <td><button type="button" class="btn-secondary history-reset-btn" data-history-key="${escapeHtml(item.key)}">重置</button></td>
+          <td><button type="button" class="btn-secondary history-reset-btn" data-history-key="${escapeHtmlAttribute(item.key)}">重置</button></td>
         </tr>
       `;
     })
     .join("");
 
-  panelElement.innerHTML = `
+  replaceChildrenFromTrustedTemplate(panelElement, `
     <h2>歷史記憶</h2>
     <div class="sheet-table-wrap">
       <table class="sheet-table">
@@ -44,7 +45,7 @@ export function renderSerialHistoryTableIn(panelElement, entries, keyLabel = "�
         <tbody>${rows}</tbody>
       </table>
     </div>
-  `;
+  `);
 }
 
 export function bindHistoryResetButtons(ui, onReset) {

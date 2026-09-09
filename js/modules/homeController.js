@@ -1,3 +1,11 @@
+import {
+  CUSTOMER_KEYS,
+  MODEL_CUSTOMER_KEYS,
+  WORK_ORDER_CUSTOMER_KEYS
+} from "./customers.js";
+import { replaceChildrenFromTrustedTemplate } from "./dom.js";
+import { escapeHtmlAttribute } from "./utils.js";
+
 export function createHomeController(deps) {
   const {
     ui,
@@ -27,8 +35,8 @@ export function createHomeController(deps) {
     updateHomeStatus
   } = deps;
 
-  const HOME_WORKORDER_CUSTOMER_ORDER = ["yingbang", "lunfei", "bng", "chg"];
-  const HOME_MODEL_CUSTOMER_ORDER = ["hmg", "clg"];
+  const HOME_WORKORDER_CUSTOMER_ORDER = WORK_ORDER_CUSTOMER_KEYS;
+  const HOME_MODEL_CUSTOMER_ORDER = MODEL_CUSTOMER_KEYS;
   const HOME_CUSTOMER_ORDER = [...HOME_WORKORDER_CUSTOMER_ORDER, ...HOME_MODEL_CUSTOMER_ORDER];
   const HOME_SEARCH_MODE_WORKORDER = "workorder";
   const HOME_SEARCH_MODE_MODEL = "model";
@@ -59,10 +67,10 @@ export function createHomeController(deps) {
   }
 
   function getHomeModelDisplayValue(customerKey, row) {
-    if (customerKey === "hmg") {
+    if (customerKey === CUSTOMER_KEYS.HMG) {
       return getHmgModelValue(row);
     }
-    if (customerKey === "clg") {
+    if (customerKey === CUSTOMER_KEYS.CLG) {
       return getClgModelValue(row);
     }
     return "";
@@ -83,14 +91,14 @@ export function createHomeController(deps) {
       .join("");
     const hiddenCount = Math.max((rows?.length || 0) - list.length, 0);
     const hiddenText = hiddenCount > 0 ? `<p class="clg-suggest-title">另有 ${hiddenCount} 筆未顯示，請縮小關鍵字。</p>` : "";
-    ui.homePreviewPanel.innerHTML = `
+    replaceChildrenFromTrustedTemplate(ui.homePreviewPanel, `
       <h2>${escapeHtml(getHomeCustomerLabel(customerKey))} 預覽窗格</h2>
       <p>關鍵字「${escapeHtml(query)}」命中 ${rows.length} 筆，請點選一筆機種：</p>
       <div class="clg-suggest-panel">
         <div class="clg-suggest-list">${optionsHtml}</div>
         ${hiddenText}
       </div>
-    `;
+    `);
   }
 
   function getHomeSearchMode() {
@@ -186,16 +194,16 @@ export function createHomeController(deps) {
     const includeModel = mode === HOME_SEARCH_MODE_MODEL;
     return {
       yingbang: includeWorkOrder && state.yingbangRowData.length > 0
-        ? findRowsByCustomerColumnCode(state.yingbangRowData, "yingbang", "WORK_ORDER", query, { stripAsteriskSuffix: true })
+        ? findRowsByCustomerColumnCode(state.yingbangRowData, CUSTOMER_KEYS.YINGBANG, "WORK_ORDER", query, { stripAsteriskSuffix: true })
         : [],
       lunfei: includeWorkOrder && state.lunfeiRowData.length > 0
-        ? findRowsByCustomerColumnCode(state.lunfeiRowData, "lunfei", "MO", query)
+        ? findRowsByCustomerColumnCode(state.lunfeiRowData, CUSTOMER_KEYS.LUNFEI, "MO", query)
         : [],
       bng: includeWorkOrder && state.bngRowData.length > 0
-        ? findRowsByCustomerColumnCode(state.bngRowData, "bng", "MO", query)
+        ? findRowsByCustomerColumnCode(state.bngRowData, CUSTOMER_KEYS.BNG, "MO", query)
         : [],
       chg: includeWorkOrder && state.chgRowData.length > 0
-        ? findRowsByCustomerColumnCode(state.chgRowData, "chg", "WORK_ORDER", query)
+        ? findRowsByCustomerColumnCode(state.chgRowData, CUSTOMER_KEYS.CHG, "WORK_ORDER", query)
         : [],
       hmg: includeModel && state.hmgRowData.length > 0 ? findHmgRowsByModel(state.hmgRowData, query) : [],
       clg: includeModel && state.clgRowData.length > 0 ? findClgRowsByModel(state.clgRowData, query) : []
@@ -209,19 +217,19 @@ export function createHomeController(deps) {
       if (!hasHit(key)) {
         return false;
       }
-      if (key === "yingbang") {
-        return hasExactTokenMatch(matchMap[key], "yingbang", "WORK_ORDER", query, { stripAsteriskSuffix: true });
+      if (key === CUSTOMER_KEYS.YINGBANG) {
+        return hasExactTokenMatch(matchMap[key], CUSTOMER_KEYS.YINGBANG, "WORK_ORDER", query, { stripAsteriskSuffix: true });
       }
-      if (key === "lunfei" || key === "bng") {
+      if (key === CUSTOMER_KEYS.LUNFEI || key === CUSTOMER_KEYS.BNG) {
         return hasExactTokenMatch(matchMap[key], key, "MO", query);
       }
-      if (key === "chg") {
-        return hasExactTokenMatch(matchMap[key], "chg", "WORK_ORDER", query);
+      if (key === CUSTOMER_KEYS.CHG) {
+        return hasExactTokenMatch(matchMap[key], CUSTOMER_KEYS.CHG, "WORK_ORDER", query);
       }
-      if (key === "hmg") {
+      if (key === CUSTOMER_KEYS.HMG) {
         return hasExactModelMatch(matchMap[key], query, getHmgModelValue);
       }
-      if (key === "clg") {
+      if (key === CUSTOMER_KEYS.CLG) {
         return hasExactModelMatch(matchMap[key], query, getClgModelValue);
       }
       return false;
@@ -296,7 +304,7 @@ export function createHomeController(deps) {
       setHomeBngPrintEnabled(false);
     } finally {
       setHomeLoading(false);
-      setHomeBngPrintEnabled(homeRuntime.customer === "bng" && Boolean(state.currentRow));
+      setHomeBngPrintEnabled(homeRuntime.customer === CUSTOMER_KEYS.BNG && Boolean(state.currentRow));
     }
   }
 
@@ -357,10 +365,10 @@ export function createHomeController(deps) {
       return;
     }
     if (!Array.isArray(allHistoryItems) || allHistoryItems.length === 0) {
-      panelElement.innerHTML = `
+      replaceChildrenFromTrustedTemplate(panelElement, `
         <h2>歷史記憶</h2>
         <div class="error-box">目前沒有可顯示的歷史資料。</div>
-      `;
+      `);
       return;
     }
     const rowsHtml = allHistoryItems
@@ -375,12 +383,12 @@ export function createHomeController(deps) {
             <td>${escapeHtml(item.keyLabel)}</td>
             <td>${escapeHtml(String(item.historyKey))}</td>
             <td>${escapeHtml(usedSerialText)}</td>
-            <td><button type="button" class="btn-secondary home-history-reset-btn" data-customer-key="${escapeHtml(item.customerKey)}" data-history-key="${escapeHtml(item.historyKey)}">重置</button></td>
+            <td><button type="button" class="btn-secondary home-history-reset-btn" data-customer-key="${escapeHtmlAttribute(item.customerKey)}" data-history-key="${escapeHtmlAttribute(item.historyKey)}">重置</button></td>
           </tr>
         `;
       })
       .join("");
-    panelElement.innerHTML = `
+    replaceChildrenFromTrustedTemplate(panelElement, `
       <h2>歷史記憶（全部客戶）</h2>
       <div class="sheet-table-wrap">
         <table class="sheet-table">
@@ -396,7 +404,7 @@ export function createHomeController(deps) {
           <tbody>${rowsHtml}</tbody>
         </table>
       </div>
-    `;
+    `);
   }
 
   async function openHomeHistoryPanel() {
@@ -471,19 +479,19 @@ export function createHomeController(deps) {
       updateHomeStatus(`匯出失敗：${getSafeErrorMessage(error)}`, true);
     } finally {
       setHomeLoading(false);
-      setHomeBngPrintEnabled(homeRuntime.customer === "bng" && Boolean(state.currentRow));
+      setHomeBngPrintEnabled(homeRuntime.customer === CUSTOMER_KEYS.BNG && Boolean(state.currentRow));
     }
   }
 
   function onHomeBngPrintClick() {
-    if (homeRuntime.customer !== "bng" || !state.currentRow) {
+    if (homeRuntime.customer !== CUSTOMER_KEYS.BNG || !state.currentRow) {
       updateHomeStatus("請先搜尋並命中 BNG 工單，再產生收據。", true);
       return;
     }
     try {
-      switchCustomerTab("bng");
+      switchCustomerTab(CUSTOMER_KEYS.BNG);
       onBngPrintReceiptClick();
-      syncHomePreviewPanel("bng");
+      syncHomePreviewPanel(CUSTOMER_KEYS.BNG);
       updateHomeStatus("已開啟 BNG 收據列印。");
     } catch (error) {
       updateHomeStatus(`產生收據失敗：${getSafeErrorMessage(error)}`, true);

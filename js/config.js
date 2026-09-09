@@ -1,7 +1,10 @@
-const DEFAULT_CUSTOMER_KEY = "yingbang";
+import { CUSTOMER_KEYS, getCustomerRegistry } from "./modules/customers.js";
+import { readStorageItem, writeStorageItem } from "./modules/storage.js";
+
+const DEFAULT_CUSTOMER_KEY = CUSTOMER_KEYS.YINGBANG;
 const ACTIVE_CUSTOMER_STORAGE_KEY = "sn_active_customer";
 
-const CUSTOMERS = window.CUSTOMERS || {};
+const CUSTOMERS = getCustomerRegistry();
 
 let activeCustomerKey = readInitialCustomerKey();
 
@@ -10,13 +13,9 @@ function readInitialCustomerKey() {
   if (!fallback) {
     return DEFAULT_CUSTOMER_KEY;
   }
-  try {
-    const saved = String(localStorage.getItem(ACTIVE_CUSTOMER_STORAGE_KEY) ?? "").trim();
-    if (saved && CUSTOMERS[saved]) {
-      return saved;
-    }
-  } catch (error) {
-    // ignore localStorage errors
+  const saved = String(readStorageItem(ACTIVE_CUSTOMER_STORAGE_KEY, "") ?? "").trim();
+  if (saved && CUSTOMERS[saved]) {
+    return saved;
   }
   return fallback;
 }
@@ -35,11 +34,7 @@ export function setActiveCustomerKey(nextKey) {
     return false;
   }
   activeCustomerKey = key;
-  try {
-    localStorage.setItem(ACTIVE_CUSTOMER_STORAGE_KEY, key);
-  } catch (error) {
-    // ignore localStorage errors
-  }
+  writeStorageItem(ACTIVE_CUSTOMER_STORAGE_KEY, key);
   return true;
 }
 

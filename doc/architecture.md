@@ -1,6 +1,6 @@
 # SN-GENERATOR (序號產生器) 系統架構設計文件
 
-**Version:** 0.3.41
+**Version:** 0.3.42
 **Last Updated:** 2026-09-09
 
 ## 1. 系統架構總覽 (Architecture Overview)
@@ -49,10 +49,13 @@ SN-GENERATOR/
 │       ├── api.js (Backend REST API wrapper, 10 endpoints)
 │       ├── bngReceipt.js (BNG receipt print payload & template)
 │       ├── customerColumns.js (customer field resolver with aliases)
+│       ├── customers.js (validated customer registry + centralized customer keys)
+│       ├── dom.js (controlled DocumentFragment template replacement boundary)
 │       ├── excel.js (week calc, SN prefix, BNG range expand, CHG bundle)
 │       ├── homeController.js (home aggregated search controller)
 │       ├── previewCustomTabs.js (custom-tab persistence, migration and CRUD controller)
 │       ├── serialSettings.js (CLG custom base serial calc)
+│       ├── storage.js (observable localStorage read/write + JSON helpers)
 │       ├── ui.js (UI aggregation entry, re-exports clipboard/history/renderers)
 │       ├── uiClipboard.js (clipboard copy + cell/button bindings)
 │       ├── uiHistory.js (history table render + reset bindings)
@@ -188,6 +191,13 @@ SN-GENERATOR/
 - ADR-038: CSS 樣式鉤子採語意 class，DOM id 僅供 JavaScript 與可及性定位 (已落地)
 - ADR-039: 六客戶首頁主題統一由 `--home-theme-accent` Custom Property 驅動 (已落地)
 - ADR-040: 版面、間距與字級採 rem 相對單位，僅保留像素邊線與膠囊圓角 (已落地)
+- ADR-041: `window.CUSTOMERS` 由 customers registry 單點驗證，功能模組不直接存取全域 (已落地)
+- ADR-042: `createUiRefs()` 啟動時一次驗證必要 DOM 並列出缺件 (已落地)
+- ADR-043: localStorage 透過 storage adapter 回報讀寫、配額與 JSON 解析錯誤 (已落地)
+- ADR-044: 首頁客戶 key 集中於不可變 `CUSTOMER_KEYS` 與客戶順序常數 (已落地)
+- ADR-045: BNG 機種備註以語意 regex 解析空白、全形標點並排除版本號 (已落地)
+- ADR-046: HTML text 與 quoted attribute 採不同 encoder，禁止跨 script/style/URL 語境沿用 (已落地)
+- ADR-047: 重複客戶預覽改用資料驅動 shell，模組模板集中經 DocumentFragment boundary 替換 (已落地)
 
 ## 11. 錯誤處理 (Error Handling)
 

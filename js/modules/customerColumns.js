@@ -1,7 +1,8 @@
 import { normalizeText } from "./utils.js";
+import { getCustomerProfileByKey } from "./customers.js";
 
 export function resolveCustomerColumnKey(customerKey, row, columnCode) {
-  const profile = window.CUSTOMERS?.[customerKey] || null;
+  const profile = getCustomerProfileByKey(customerKey);
   const columns = profile?.columns || {};
   const columnAliases = profile?.columnAliases || {};
   if (!row) {

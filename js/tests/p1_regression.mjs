@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 
 const copiedValues = [];
-globalThis.window = { isSecureContext: true };
+globalThis.window = {
+  isSecureContext: true,
+  CUSTOMERS: Object.fromEntries(
+    ["yingbang", "lunfei", "bng", "chg", "hmg", "clg"].map((key) => [key, { key }])
+  )
+};
+globalThis.localStorage = { getItem: () => null, setItem: () => {} };
 Object.defineProperty(globalThis, "navigator", {
   configurable: true,
   value: {
@@ -20,6 +26,12 @@ globalThis.setTimeout = (callback) => {
 };
 
 const { bindSheetCopyCellsIn } = await import("../modules/uiClipboard.js");
+const { getCustomerRegistry } = await import("../modules/customers.js");
+const { createUiRefs } = await import("../state.js");
+const { readJsonStorage, setStorageErrorHandler, writeStorageItem } = await import("../modules/storage.js");
+const { splitBngModelAndRemark } = await import("../modules/bngReceipt.js");
+const { escapeHtmlAttribute } = await import("../modules/utils.js");
+const { updateStatus } = await import("../modules/ui.js");
 const listeners = [];
 const root = {
   addEventListener(type, listener) {
@@ -79,4 +91,90 @@ const fixedLayoutPixels = stylesheet
   .filter((line) => !/^\s*border-radius:\s*999px/.test(line));
 assert.deepEqual(fixedLayoutPixels, [], "版面與字級尺寸應使用 rem/em，僅保留像素邊線與膠囊圓角");
 
-process.stdout.write("P1 frontend event-delegation and CSS regression passed.\n");
+assert.equal(Object.keys(getCustomerRegistry()).length, 6, "CUSTOMERS 初始化後應通過集中驗證");
+const originalCustomers = window.CUSTOMERS;
+delete window.CUSTOMERS;
+assert.throws(() => getCustomerRegistry(), /CUSTOMERS 尚未初始化/);
+window.CUSTOMERS = originalCustomers;
+
+assert.throws(
+  () => createUiRefs({ getElementById: () => null }),
+  /缺少必要 DOM 元素/,
+  "DOM 不完整時應在初始化階段提供明確錯誤"
+);
+
+const storageErrors = [];
+setStorageErrorHandler((detail) => storageErrors.push(detail));
+const originalConsoleError = console.error;
+console.error = () => {};
+globalThis.localStorage = {
+  setItem() {
+    throw new DOMException("quota exceeded", "QuotaExceededError");
+  }
+};
+assert.equal(writeStorageItem("test-key", "value"), false);
+assert.equal(storageErrors[0]?.operation, "write", "localStorage 寫入失敗必須通知呼叫端");
+globalThis.localStorage = { getItem: () => "{broken-json" };
+assert.deepEqual(readJsonStorage("broken-key", {}), {});
+assert.equal(storageErrors[1]?.operation, "parse", "損壞的 localStorage JSON 不得靜默忽略");
+console.error = originalConsoleError;
+
+assert.deepEqual(
+  splitBngModelAndRemark("MODEL-X   1． 更換 BIOS"),
+  { model: "MODEL-X", remark: "1． 更換 BIOS" }
+);
+assert.deepEqual(
+  splitBngModelAndRemark("MODEL-X 1.2"),
+  { model: "MODEL-X 1.2", remark: "" },
+  "版本號不可誤判為備註"
+);
+
+const encodedAttribute = escapeHtmlAttribute("\"'`=\r\n<img>");
+assert.doesNotMatch(encodedAttribute, /["'`=\r\n<>]/, "屬性 encoder 必須處理控制字元與屬性分隔符");
+
+const rendererSource = readFileSync(new URL("../modules/uiPreviewRenderers.js", import.meta.url), "utf8");
+for (const functionName of ["renderLunfeiSearchSuccess", "renderBngSearchSuccess", "renderChgSearchSuccess"]) {
+  const functionStart = rendererSource.indexOf(`export function ${functionName}`);
+  const nextExport = rendererSource.indexOf("\nexport function ", functionStart + 1);
+  const functionSource = rendererSource.slice(functionStart, nextExport < 0 ? undefined : nextExport);
+  assert.match(functionSource, /renderCustomerSearchSuccessLayout\(/, `${functionName} 應使用資料驅動共用元件`);
+  assert.doesNotMatch(functionSource, /\.innerHTML\s*=/, `${functionName} 不應自行維護完整 HTML shell`);
+}
+
+const homeControllerSource = readFileSync(new URL("../modules/homeController.js", import.meta.url), "utf8");
+assert.doesNotMatch(
+  homeControllerSource,
+  /["'](?:yingbang|lunfei|bng|chg|hmg|clg)["']/,
+  "homeController 客戶 key 應集中於 CUSTOMER_KEYS"
+);
+
+const indexSource = readFileSync(new URL("../../index.html", import.meta.url), "utf8");
+const stateSource = readFileSync(new URL("../state.js", import.meta.url), "utf8");
+const requiredDomIds = [...stateSource.matchAll(/getElementById\("([^"]+)"\)/g)].map((match) => match[1]);
+const missingDomIds = requiredDomIds.filter((id) => !indexSource.includes(`id="${id}"`));
+assert.deepEqual(missingDomIds, [], "state.js 的必要 DOM refs 必須全部存在於 index.html");
+
+const statusClasses = new Set(["status-message"]);
+const statusElement = {
+  textContent: "",
+  classList: {
+    toggle(name, enabled) {
+      enabled ? statusClasses.add(name) : statusClasses.delete(name);
+    }
+  }
+};
+updateStatus({ status: statusElement }, "失敗", true);
+assert.equal(statusClasses.has("status-message"), true, "狀態更新不得清除語意 class");
+assert.equal(statusClasses.has("error"), true);
+
+const moduleDirectory = new URL("../modules/", import.meta.url);
+const directInnerHtmlModules = readdirSync(moduleDirectory)
+  .filter((name) => name.endsWith(".js") && name !== "dom.js")
+  .filter((name) => /\.innerHTML\s*=/.test(readFileSync(new URL(name, moduleDirectory), "utf8")));
+assert.deepEqual(
+  directInnerHtmlModules,
+  [],
+  "功能模組不得直接寫入 innerHTML，模板解析只能位於 dom.js 的受控邊界"
+);
+
+process.stdout.write("P1 frontend architecture, safety and CSS regression passed.\n");

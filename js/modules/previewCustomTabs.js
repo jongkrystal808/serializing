@@ -1,3 +1,5 @@
+import { readJsonStorage, writeJsonStorage } from "./storage.js";
+
 // 【用途】建立自訂預覽頁籤控制器，集中處理純文字持久化、遷移與 CRUD。
 export function createPreviewCustomTabsController({
   storageKey,
@@ -13,25 +15,13 @@ export function createPreviewCustomTabsController({
 
   // 【用途】讀取本機儲存的自訂頁籤設定（依客戶分組）。
   function readStoredTabs() {
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) {
-        return {};
-      }
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
-    } catch (error) {
-      return {};
-    }
+    const parsed = readJsonStorage(storageKey, {});
+    return parsed && typeof parsed === "object" ? parsed : {};
   }
 
   // 【用途】保存本機自訂頁籤設定。
   function writeStoredTabs(data) {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(data || {}));
-    } catch (error) {
-      // localStorage 不可用時維持記憶體內操作，不中斷主要流程。
-    }
+    writeJsonStorage(storageKey, data || {});
   }
 
   // 【用途】把舊版自訂頁籤 HTML 安全轉為純文字，遷移時不插入頁面。

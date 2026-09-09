@@ -1,5 +1,8 @@
 import { CONFIG } from "../config.js";
-import { escapeHtml } from "./utils.js";
+import { escapeHtml, escapeHtmlAttribute } from "./utils.js";
+import { getCustomerProfileByKey } from "./customers.js";
+import { splitBngModelAndRemark } from "./bngReceipt.js";
+import { replaceChildrenFromTrustedTemplate } from "./dom.js";
 
 function renderPreviewItem(label, value, copyable) {
   const escapedLabel = escapeHtml(label);
@@ -45,7 +48,7 @@ function renderSheetContentPane(rows) {
       const cells = headers
         .map((key) => {
           const value = String(row[key] ?? "");
-          return `<td class="copyable-cell" data-copy-value="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
+          return `<td class="copyable-cell" data-copy-value="${escapeHtmlAttribute(value)}">${escapeHtml(value)}</td>`;
         })
         .join("");
       return `<tr>${cells}</tr>`;
@@ -63,16 +66,49 @@ function renderSheetContentPane(rows) {
   `;
 }
 
-function renderHistoryPane(workOrderHistory) {
+function renderHistoryPane(workOrderHistory, clearButtonId = "btn-clear-history") {
   const items = workOrderHistory
     .map((record) => `<li>${escapeHtml(record)}</li>`)
     .join("");
   return `
     <ol class="history-list">${items}</ol>
     <div class="history-actions">
-      <button type="button" class="btn-secondary" id="btn-clear-history">清空歷史序號</button>
+      <button type="button" class="btn-secondary" id="${escapeHtmlAttribute(clearButtonId)}">清空歷史序號</button>
     </div>
   `;
+}
+
+// 【用途】以單一資料驅動模板組裝客戶成功預覽，集中動態內容編碼與共用頁籤結構。
+function renderCustomerSearchSuccessLayout(panelElement, options) {
+  if (!panelElement) {
+    return;
+  }
+  const {
+    customerKey,
+    title,
+    queryLabel,
+    query,
+    matchCount,
+    printNotice,
+    headlineHtml,
+    previewHtml,
+    rowData,
+    generationHistory,
+    clearHistoryButtonId
+  } = options;
+  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
+  const customTabs = getConfiguredPreviewTabs(customerKey);
+  replaceChildrenFromTrustedTemplate(panelElement, `
+    ${renderTitleWithHelp(title, "preview-panel")}
+    <p>查詢${escapeHtml(queryLabel)}：${escapeHtml(query)}（命中 ${Number(matchCount) || 0} 筆，預設取第 1 筆）</p>
+    ${renderPrintedToggle(printNotice || {})}
+    ${headlineHtml}
+    ${renderPreviewTabs(customerKey, hasHistory, customTabs)}
+    <div class="preview-pane active" data-pane="preview">${previewHtml}</div>
+    <div class="preview-pane" data-pane="sheet">${renderSheetContentPane(rowData)}</div>
+    ${hasHistory ? `<div class="preview-pane" data-pane="history">${renderHistoryPane(generationHistory, clearHistoryButtonId)}</div>` : ""}
+    ${renderCustomPreviewPanes(customerKey, customTabs)}
+  `);
 }
 
 function normalizeCustomTabId(rawId, index) {
@@ -94,7 +130,7 @@ function customTabHtmlToText(value) {
 
 function getConfiguredPreviewTabs(customerKey) {
   const key = String(customerKey ?? "").trim();
-  const profile = window.CUSTOMERS?.[key] || {};
+  const profile = getCustomerProfileByKey(key) || {};
   const tabs = [];
   const usedIds = new Set();
 
@@ -168,7 +204,7 @@ function getConfiguredPreviewTabs(customerKey) {
 
 function renderPreviewTabs(customerKey, hasHistory, customTabs) {
   const customTabButtons = (customTabs || [])
-    .map((tab) => `<button type="button" class="preview-tab preview-tab-custom" data-tab="${escapeHtml(tab.tabId)}">${escapeHtml(tab.label)}</button>`)
+    .map((tab) => `<button type="button" class="preview-tab preview-tab-custom" data-tab="${escapeHtmlAttribute(tab.tabId)}">${escapeHtml(tab.label)}</button>`)
     .join("");
   return `
     <div class="preview-tabs-row">
@@ -178,7 +214,7 @@ function renderPreviewTabs(customerKey, hasHistory, customTabs) {
         ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
         ${customTabButtons}
       </div>
-      <button type="button" class="preview-tab-add" data-action="add-custom-tab" data-customer-key="${escapeHtml(customerKey)}">+ 新增頁籤</button>
+      <button type="button" class="preview-tab-add" data-action="add-custom-tab" data-customer-key="${escapeHtmlAttribute(customerKey)}">+ 新增頁籤</button>
     </div>
   `;
 }
@@ -193,15 +229,15 @@ function renderCustomPreviewPanes(customerKey, customTabs) {
         ? `<div class="preview-custom-text">${escapeHtml(tab.text).replace(/\n/g, "<br>")}</div>`
         : "";
       return `
-        <div class="preview-pane preview-pane-custom" data-pane="${escapeHtml(tab.tabId)}">
+        <div class="preview-pane preview-pane-custom" data-pane="${escapeHtmlAttribute(tab.tabId)}">
           ${tab.removable ? `<div class="preview-custom-actions">
             <button
               type="button"
               class="btn-secondary preview-custom-remove-btn"
               data-action="remove-custom-tab"
-              data-customer-key="${escapeHtml(customerKey)}"
-              data-tab-id="${escapeHtml(tab.tabId)}"
-              data-tab-item-id="${escapeHtml(tab.itemId || "")}"
+              data-customer-key="${escapeHtmlAttribute(customerKey)}"
+              data-tab-id="${escapeHtmlAttribute(tab.tabId)}"
+              data-tab-item-id="${escapeHtmlAttribute(tab.itemId || "")}"
             >移除頁籤</button>
           </div>` : ""}
           ${tab.removable
@@ -209,9 +245,9 @@ function renderCustomPreviewPanes(customerKey, customTabs) {
                 class="preview-custom-editor"
                 contenteditable="plaintext-only"
                 data-action="edit-custom-tab"
-                data-customer-key="${escapeHtml(customerKey)}"
-                data-tab-id="${escapeHtml(tab.tabId)}"
-                data-tab-item-id="${escapeHtml(tab.itemId || "")}"
+                data-customer-key="${escapeHtmlAttribute(customerKey)}"
+                data-tab-id="${escapeHtmlAttribute(tab.tabId)}"
+                data-tab-item-id="${escapeHtmlAttribute(tab.itemId || "")}"
                 data-placeholder="請在這裡編輯備註內容"
               >${textContent}</div>`
             : textContent}
@@ -270,7 +306,7 @@ function renderBngStatusBadge(status) {
   if (!status) {
     return "";
   }
-  return `<span class="bng-row-status bng-row-status-${escapeHtml(status.tone)}">${escapeHtml(status.text)}</span>`;
+  return `<span class="bng-row-status bng-row-status-${escapeHtmlAttribute(status.tone)}">${escapeHtml(status.text)}</span>`;
 }
 
 function buildBngQuantityStatuses(qty, macQty, macBoardQty) {
@@ -302,10 +338,10 @@ function renderBngCopyRow({ label, value, copyValue, monospace = false, status =
         <button
           type="button"
           class="copy-btn bng-copy-btn"
-          data-copy-value="${escapeHtml(rawCopyValue)}"
+          data-copy-value="${escapeHtmlAttribute(rawCopyValue)}"
           data-copied-text="已複製 ✓"
-          title="複製 ${escapeHtml(label)}"
-          aria-label="複製 ${escapeHtml(label)}"
+          title="複製 ${escapeHtmlAttribute(label)}"
+          aria-label="複製 ${escapeHtmlAttribute(label)}"
         >複製</button>
       </div>
     </div>
@@ -321,7 +357,7 @@ function renderBngCopySection(title, rows) {
     ? `<button
         type="button"
         class="copy-btn bng-copy-all-btn"
-        data-copy-value="${escapeHtml(sectionCopyText)}"
+        data-copy-value="${escapeHtmlAttribute(sectionCopyText)}"
         data-copied-text="已複製 ✓"
       >全部複製</button>`
     : "";
@@ -342,13 +378,7 @@ function renderBngCopySection(title, rows) {
 }
 
 function formatBngModelForBox(modelValue) {
-  const text = String(modelValue ?? "").trim();
-  const marker = " 1.";
-  const markerIndex = text.indexOf(marker);
-  if (markerIndex < 0) {
-    return text;
-  }
-  return text.slice(0, markerIndex).trim();
+  return splitBngModelAndRemark(modelValue).model;
 }
 
 export function renderTitleWithHelp(title, topic) {
@@ -392,10 +422,10 @@ function renderPrintedToggle(args) {
         type="checkbox"
         class="printed-toggle-input"
         data-role="printed-toggle"
-        data-customer-key="${escapeHtml(customerKey)}"
-        data-customer-label="${escapeHtml(customerLabel)}"
-        data-workorder-label="${escapeHtml(workOrderLabel)}"
-        data-workorder-value="${escapeHtml(normalizedValue)}"
+        data-customer-key="${escapeHtmlAttribute(customerKey)}"
+        data-customer-label="${escapeHtmlAttribute(customerLabel)}"
+        data-workorder-label="${escapeHtmlAttribute(workOrderLabel)}"
+        data-workorder-value="${escapeHtmlAttribute(normalizedValue)}"
         ${checked ? "checked" : ""}
       >
       <span>完成列印後勾選，首頁公告欄將顯示「${escapeHtml(customerLabel)}-${escapeHtml(normalizedValue)} 已列印」</span>
@@ -404,10 +434,10 @@ function renderPrintedToggle(args) {
 }
 
 export function renderSearchNotFound(ui, query) {
-  ui.previewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.previewPanel, `
     ${renderTitleWithHelp("預覽窗格", "preview-panel")}
     <div class="error-box">找不到工單：${escapeHtml(query)}</div>
-  `;
+  `);
 }
 
 export function renderSearchSuccess(ui, args) {
@@ -431,7 +461,7 @@ export function renderSearchSuccess(ui, args) {
   const hasHistory = Array.isArray(workOrderHistory) && workOrderHistory.length > 0;
   const customTabs = getConfiguredPreviewTabs("yingbang");
 
-  ui.previewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.previewPanel, `
     ${renderTitleWithHelp("預覽窗格", "preview-panel")}
     <p>查詢工單：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
     ${renderPrintedToggle(args.printNotice || {})}
@@ -455,17 +485,17 @@ export function renderSearchSuccess(ui, args) {
     </div>
     ${hasHistory ? `<div class="preview-pane" data-pane="history">${renderHistoryPane(workOrderHistory)}</div>` : ""}
     ${renderCustomPreviewPanes("yingbang", customTabs)}
-  `;
+  `);
 }
 
 export function renderLunfeiSearchNotFound(ui, query) {
   if (!ui.lunfeiPreviewPanel) {
     return;
   }
-  ui.lunfeiPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.lunfeiPreviewPanel, `
     ${renderTitleWithHelp("倫飛預覽窗格", "preview-panel")}
     <div class="error-box">找不到 MO：${escapeHtml(query)}</div>
-  `;
+  `);
 }
 
 export function renderLunfeiSearchSuccess(ui, args) {
@@ -485,18 +515,15 @@ export function renderLunfeiSearchSuccess(ui, args) {
   const processWo = row[resolveColumnKey(row, "PROCESS_WO") || CONFIG.COLUMNS.PROCESS_WO] || "";
   const pcba = row[resolveColumnKey(row, "PCBA") || CONFIG.COLUMNS.PCBA] || "";
   const qty = resolvedQty || row[resolveColumnKey(row, "QTY") || CONFIG.COLUMNS.QTY] || "";
-  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
-  const customTabs = getConfiguredPreviewTabs("lunfei");
-
-  ui.lunfeiPreviewPanel.innerHTML = `
-    ${renderTitleWithHelp("倫飛預覽窗格", "preview-panel")}
-    <p>查詢 MO：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
-    ${renderPrintedToggle(args.printNotice || {})}
-    <div class="preview-headline">
-      <p class="preview-title">Model：${escapeHtml(model)}</p>
-    </div>
-    ${renderPreviewTabs("lunfei", hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">
+  renderCustomerSearchSuccessLayout(ui.lunfeiPreviewPanel, {
+    customerKey: "lunfei",
+    title: "倫飛預覽窗格",
+    queryLabel: " MO",
+    query,
+    matchCount,
+    printNotice: args.printNotice,
+    headlineHtml: `<div class="preview-headline"><p class="preview-title">Model：${escapeHtml(model)}</p></div>`,
+    previewHtml: `
       <div class="preview-grid">
         ${renderPreviewItem("SN（第一筆預覽）", previewSN, true)}
         ${renderPreviewItem("工單", workOrder, true)}
@@ -505,28 +532,21 @@ export function renderLunfeiSearchSuccess(ui, args) {
         ${renderPreviewItem("對應PCBA", pcba, true)}
         ${renderPreviewItem("Q'ty", qty, true)}
       </div>
-    </div>
-    <div class="preview-pane" data-pane="sheet">
-      ${renderSheetContentPane(rowData)}
-    </div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">
-      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
-      <div class="history-actions">
-        <button type="button" class="btn-secondary" id="btn-clear-history-lunfei">清空歷史序號</button>
-      </div>
-    </div>` : ""}
-    ${renderCustomPreviewPanes("lunfei", customTabs)}
-  `;
+    `,
+    rowData,
+    generationHistory,
+    clearHistoryButtonId: "btn-clear-history-lunfei"
+  });
 }
 
 export function renderBngSearchNotFound(ui, query) {
   if (!ui.bngPreviewPanel) {
     return;
   }
-  ui.bngPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.bngPreviewPanel, `
     ${renderTitleWithHelp("超恩預覽窗格", "preview-panel")}
     <div class="error-box">查無對應資料，請確認 MO 是否正確（${escapeHtml(query)}）</div>
-  `;
+  `);
 }
 
 export function renderBngSearchSuccess(ui, args) {
@@ -560,8 +580,6 @@ export function renderBngSearchSuccess(ui, args) {
   const sourceBadge = source
     ? `<span class="bng-source-badge">來源：${escapeHtml(source)}</span>`
     : "";
-  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
-  const customTabs = getConfiguredPreviewTabs("bng");
   const snGroup = renderBngCopySection("SN 分配", [
     {
       label: "內裝區間",
@@ -659,19 +677,21 @@ export function renderBngSearchSuccess(ui, args) {
     }
   ]);
 
-  ui.bngPreviewPanel.innerHTML = `
-    ${renderTitleWithHelp("超恩預覽窗格", "preview-panel")}
-    <p>查詢 MO：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
-    ${renderPrintedToggle(args.printNotice || {})}
-    <div class="preview-headline">
+  renderCustomerSearchSuccessLayout(ui.bngPreviewPanel, {
+    customerKey: "bng",
+    title: "超恩預覽窗格",
+    queryLabel: " MO",
+    query,
+    matchCount,
+    printNotice: args.printNotice,
+    headlineHtml: `<div class="preview-headline">
       <div class="preview-title-row">
         <p class="preview-title">${escapeHtml(model)}</p>
         ${sourceBadge}
       </div>
       <p class="preview-subtitle">機種料號：${escapeHtml(partNo)}｜日期：${escapeHtml(date)}</p>
-    </div>
-    ${renderPreviewTabs("bng", hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">
+    </div>`,
+    previewHtml: `
       <div class="bng-preview-groups">
         ${snGroup}
         ${macGroup}
@@ -679,28 +699,21 @@ export function renderBngSearchSuccess(ui, args) {
         ${fwBiosGroup}
         ${boxGroup}
       </div>
-    </div>
-    <div class="preview-pane" data-pane="sheet">
-      ${renderSheetContentPane(rowData)}
-    </div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">
-      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
-      <div class="history-actions">
-        <button type="button" class="btn-secondary" id="btn-clear-history-bng">清空歷史序號</button>
-      </div>
-    </div>` : ""}
-    ${renderCustomPreviewPanes("bng", customTabs)}
-  `;
+    `,
+    rowData,
+    generationHistory,
+    clearHistoryButtonId: "btn-clear-history-bng"
+  });
 }
 
 export function renderChgSearchNotFound(ui, query) {
   if (!ui.chgPreviewPanel) {
     return;
   }
-  ui.chgPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.chgPreviewPanel, `
     ${renderTitleWithHelp("KOYA 預覽窗格", "preview-panel")}
     <div class="error-box">查無對應資料，請確認工單是否正確（${escapeHtml(query)}）</div>
-  `;
+  `);
 }
 
 export function renderChgSearchSuccess(ui, args) {
@@ -722,8 +735,6 @@ export function renderChgSearchSuccess(ui, args) {
   const boxQty = row[resolveColumnKey(row, "BOX_QTY") || CONFIG.COLUMNS.BOX_QTY] || "";
   const demand = row[resolveColumnKey(row, "DEMAND") || CONFIG.COLUMNS.DEMAND] || "";
   const tailQty = row[resolveColumnKey(row, "TAIL_QTY") || CONFIG.COLUMNS.TAIL_QTY] || "";
-  const hasHistory = Array.isArray(generationHistory) && generationHistory.length > 0;
-  const customTabs = getConfiguredPreviewTabs("chg");
   const subtitleParts = [
     `工單：${escapeHtml(workOrder)}`,
     `PO：${escapeHtml(po)}`,
@@ -768,40 +779,35 @@ export function renderChgSearchSuccess(ui, args) {
     }
   ]);
 
-  ui.chgPreviewPanel.innerHTML = `
-    ${renderTitleWithHelp("KOYA 預覽窗格", "preview-panel")}
-    <p>查詢工單：${escapeHtml(query)}（命中 ${matchCount} 筆，預設取第 1 筆）</p>
-    ${renderPrintedToggle(args.printNotice || {})}
-    <div class="preview-headline">
+  renderCustomerSearchSuccessLayout(ui.chgPreviewPanel, {
+    customerKey: "chg",
+    title: "KOYA 預覽窗格",
+    queryLabel: "工單",
+    query,
+    matchCount,
+    printNotice: args.printNotice,
+    headlineHtml: `<div class="preview-headline">
       <p class="preview-title">${escapeHtml(model)}</p>
       <p class="preview-subtitle">${subtitleParts.join("｜")}</p>
-    </div>
-    ${renderPreviewTabs("chg", hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">
+    </div>`,
+    previewHtml: `
       ${labelGroup}
       ${boxLabelGroup}
-    </div>
-    <div class="preview-pane" data-pane="sheet">
-      ${renderSheetContentPane(rowData)}
-    </div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">
-      <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
-      <div class="history-actions">
-        <button type="button" class="btn-secondary" id="btn-clear-history-chg">清空歷史序號</button>
-      </div>
-    </div>` : ""}
-    ${renderCustomPreviewPanes("chg", customTabs)}
-  `;
+    `,
+    rowData,
+    generationHistory,
+    clearHistoryButtonId: "btn-clear-history-chg"
+  });
 }
 
 export function renderHmgSearchNotFound(ui, query) {
   if (!ui.hmgPreviewPanel) {
     return;
   }
-  ui.hmgPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.hmgPreviewPanel, `
     ${renderTitleWithHelp("赫星 預覽窗格", "preview-panel")}
     <div class="error-box">查無對應機種，請確認 Model 關鍵字是否正確（${escapeHtml(query)}）</div>
-  `;
+  `);
 }
 
 export function renderHmgSearchSuccess(ui, args) {
@@ -829,7 +835,7 @@ export function renderHmgSearchSuccess(ui, args) {
     ? previewItems.map((item) => renderPreviewItem(item.label, item.value, item.copyable)).join("")
     : `<p class="preview-empty-note">目前可顯示欄位皆為空值。</p>`;
 
-  ui.hmgPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.hmgPreviewPanel, `
     ${renderTitleWithHelp("赫星 預覽窗格", "preview-panel")}
     <p>查詢 Model：${escapeHtml(query)}（命中 ${matchCount} 筆）</p>
     <div class="preview-headline">
@@ -851,17 +857,17 @@ export function renderHmgSearchSuccess(ui, args) {
       </div>
     </div>` : ""}
     ${renderCustomPreviewPanes("hmg", customTabs)}
-  `;
+  `);
 }
 
 export function renderClgSearchNotFound(ui, query) {
   if (!ui.clgPreviewPanel) {
     return;
   }
-  ui.clgPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.clgPreviewPanel, `
     ${renderTitleWithHelp("Cubepilot 預覽窗格", "preview-panel")}
     <div class="error-box">查無對應機種，請確認機種名是否正確（${escapeHtml(query)}）</div>
-  `;
+  `);
 }
 
 export function renderClgSearchSuccess(ui, args) {
@@ -888,7 +894,7 @@ export function renderClgSearchSuccess(ui, args) {
   const previewGridHtml = previewItems.length > 0
     ? previewItems.map((item) => renderPreviewItem(item.label, item.value, item.copyable)).join("")
     : `<p class="preview-empty-note">目前可顯示欄位皆為空值。</p>`;
-  ui.clgPreviewPanel.innerHTML = `
+  replaceChildrenFromTrustedTemplate(ui.clgPreviewPanel, `
     ${renderTitleWithHelp("Cubepilot 預覽窗格", "preview-panel")}
     <p>查詢機種名：${escapeHtml(query)}（命中 ${matchCount} 筆）</p>
     <div class="preview-headline">
@@ -910,5 +916,5 @@ export function renderClgSearchSuccess(ui, args) {
       </div>
     </div>` : ""}
     ${renderCustomPreviewPanes("clg", customTabs)}
-  `;
+  `);
 }

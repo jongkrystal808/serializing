@@ -15,8 +15,12 @@ export const state = {
   isLoading: false
 };
 
-export function createUiRefs() {
-  return {
+export function createUiRefs(documentValue = globalThis.document) {
+  if (!documentValue || typeof documentValue.getElementById !== "function") {
+    throw new Error("無法初始化 UI：document 尚未就緒。");
+  }
+  const document = documentValue;
+  const refs = {
     sourceHint: document.getElementById("source-hint"),
     yingbangTab: document.getElementById("tab-yingbang"),
     lunfeiTab: document.getElementById("tab-lunfei"),
@@ -118,4 +122,11 @@ export function createUiRefs() {
     homePrintHistoryPanel: document.getElementById("home-print-history-panel"),
     bngReceiptPrintRoot: document.getElementById("bng-receipt-print-root")
   };
+  const missingRefs = Object.entries(refs)
+    .filter(([, element]) => element === null)
+    .map(([name]) => name);
+  if (missingRefs.length > 0) {
+    throw new Error(`無法初始化 UI，缺少必要 DOM 元素：${missingRefs.join(", ")}`);
+  }
+  return refs;
 }

@@ -1,7 +1,7 @@
 # Development Process Guide / 開發流程指南
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.41
+**Version:** 0.3.42
 **Last Updated:** 2026-09-09
 
 ---
@@ -158,6 +158,10 @@ Step 3: 找到原因後，更新 doc/debug.md
 - [ ] **CSS 使用低特異性語意 class** — `id` 保留給 DOM 定位，不作為樣式選擇器
 - [ ] **客戶主題由 Custom Properties 驅動** — 共用元件只讀取主題變數，不複製客戶規則
 - [ ] **響應式尺寸使用 rem/em** — 版面、間距與字級避免固定 px；1px 邊線等視覺細節可保留
+- [ ] **全域設定必須集中驗證** — 禁止功能模組直接依賴未檢查的 `window.*` 設定
+- [ ] **必要 DOM 在啟動時驗證** — 缺少節點時列出明確名稱，不延後成 null dereference
+- [ ] **瀏覽器儲存錯誤必須可見** — localStorage 讀寫、配額及 JSON 錯誤不可靜默忽略
+- [ ] **輸出編碼依語境選擇** — HTML text 與 attribute 使用各自 encoder，禁止沿用至 script/style/URL context
 
 ---
 

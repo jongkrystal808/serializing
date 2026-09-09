@@ -1,10 +1,18 @@
 # Update History / 更新紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.41
+**Version:** 0.3.42
 **Last Updated:** 2026-09-09
 
 ---
+
+## v0.3.42 (2026-09-09)
+- refactor(ui): Lunfei、BNG、CHG 成功預覽共用資料驅動 shell；模組模板統一經 DocumentFragment boundary 更新
+- fix(ui): 狀態更新改用 `classList.toggle()`，避免清除 `.status-message` 等語意 class
+- fix(init): 新增 validated customer registry 與必要 DOM fail-fast 檢查，移除功能模組對未驗證 `window.CUSTOMERS` 的直接依賴
+- fix(storage): localStorage 權限、配額及 JSON 損壞不再靜默，統一回報首頁狀態列
+- refactor(core): `homeController` 改用集中 customer constants；BNG 備註改用容錯 regex；HTML attribute 使用獨立 encoder
+- test: 擴充前端 P1 regression，涵蓋 registry、DOM、storage、BNG parser、context encoder、WET renderer 與 magic string 防回歸
 
 ## v0.3.41 (2026-09-09)
 - refactor(css): 移除 `main.css` 的 ID selector，改由 index.html 提供低特異性語意 class；既有 id 保留給 JavaScript DOM 定位
