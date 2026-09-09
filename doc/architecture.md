@@ -1,6 +1,6 @@
 # SN-GENERATOR (序號產生器) 系統架構設計文件
 
-**Version:** 0.3.40
+**Version:** 0.3.41
 **Last Updated:** 2026-09-09
 
 ## 1. 系統架構總覽 (Architecture Overview)
@@ -185,6 +185,9 @@ SN-GENERATOR/
 - ADR-035: 未預期例外採對外固定訊息、對內 logger.exception 完整記錄 (已落地)
 - ADR-036: Excel 上傳採 request body、實際檔案及 XLSX 解壓總量三層限制 (已落地)
 - ADR-037: Content-Disposition 動態檔名先移除 ASCII 控制字元再編碼 (已落地)
+- ADR-038: CSS 樣式鉤子採語意 class，DOM id 僅供 JavaScript 與可及性定位 (已落地)
+- ADR-039: 六客戶首頁主題統一由 `--home-theme-accent` Custom Property 驅動 (已落地)
+- ADR-040: 版面、間距與字級採 rem 相對單位，僅保留像素邊線與膠囊圓角 (已落地)
 
 ## 11. 錯誤處理 (Error Handling)
 

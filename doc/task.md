@@ -1,7 +1,7 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.40
+**Version:** 0.3.41
 **Last Updated:** 2026-09-09
 
 ---
@@ -29,8 +29,11 @@
 - [x] 移除 500 錯誤中的內部資訊洩漏，完整堆疊改記錄於 logger（完成：2026-09-09）
 - [x] 加入 request body、實際檔案與 XLSX 解壓後總量三層上傳限制（完成：2026-09-09）
 - [x] 修正 Content-Disposition 檔名控制字元注入風險（完成：2026-09-09）
+- [x] 將 `main.css` 的 ID selector 改為語意 class（完成：2026-09-09）
+- [x] 六客戶首頁主題改由 CSS Custom Property 驅動（完成：2026-09-09）
+- [x] 版面、間距與字級的固定 px 改為 rem，保留像素邊線等合理例外（完成：2026-09-09）
 
-**Current Result:** 阻塞 I/O 已交由 FastAPI Thread Pool；大表格每個預覽 root 固定一個儲存格 listener；`app.js` 由 3,571 行降至 3,355 行。500 錯誤不再外洩例外內容，Excel 上傳加入三層容量限制，下載檔名會移除控制字元。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端事件委派測試通過。
+**Current Result:** 阻塞 I/O 已交由 FastAPI Thread Pool；大表格每個預覽 root 固定一個儲存格 listener；`app.js` 由 3,571 行降至 3,355 行。500 錯誤、Excel 上傳及下載標頭安全修補完成。CSS 已移除 ID selector、統一六客戶主題變數，且響應式尺寸改用 rem。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端 P1 regression 通過。
 
 ---
 

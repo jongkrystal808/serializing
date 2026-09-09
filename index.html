@@ -243,16 +243,16 @@
     </aside>
 
     <div class="home-layout-main">
-      <section id="home-shell" class="card">
+      <section id="home-shell" class="card home-shell home-theme-surface">
         <h2 class="section-title">首頁查詢</h2>
         <div class="toolbar compact-action-bar">
           <button id="btn-home-history" class="btn-secondary">查看歷史</button>
           <div class="search-group">
-            <select id="home-search-type" aria-label="首頁搜尋類型">
+            <select id="home-search-type" class="home-search-type" aria-label="首頁搜尋類型">
               <option value="workorder">工單 / MO</option>
               <option value="model">機種（Model）</option>
             </select>
-            <input id="home-search-input" type="text" placeholder="搜尋全客戶工單 / MO">
+            <input id="home-search-input" class="home-search-input" type="text" placeholder="搜尋全客戶工單 / MO">
             <button id="btn-home-query" class="btn-search">搜尋</button>
           </div>
           <button id="btn-home-export" disabled>生成序號 & 匯出</button>
@@ -261,7 +261,7 @@
         <button id="btn-clg-settings-toggle" type="button" class="btn-secondary clg-settings-entry" aria-expanded="false" aria-controls="clg-serial-settings-card">自定義序號生成</button>
         <div class="status-row">
           <span id="home-loading-indicator" class="loading-indicator" aria-hidden="true"></span>
-          <p id="home-status">目前模式：工單 / MO 搜尋（全客戶）。</p>
+          <p id="home-status" class="status-message home-status">目前模式：工單 / MO 搜尋（全客戶）。</p>
         </div>
         <div class="home-footer-actions">
           <button id="btn-home-print-history" type="button" class="btn-secondary">列印歷史</button>
@@ -280,12 +280,12 @@
             <option value="cycle_0_6">0–6 循環進位制</option>
             <option value="cycle_1_6">1–6 循環進位制</option>
           </select>
-          <input id="clg-count-input" type="number" min="1" step="1" value="1" placeholder="要生產幾個序號">
+          <input id="clg-count-input" class="clg-count-input" type="number" min="1" step="1" value="1" placeholder="要生產幾個序號">
         </div>
-        <div id="clg-settings-planned-preview-root"></div>
+        <div id="clg-settings-planned-preview-root" class="clg-settings-planned-preview-root"></div>
       </section>
 
-      <section id="home-preview-panel" class="card">
+      <section id="home-preview-panel" class="card home-theme-surface">
         <h2>預覽窗格</h2>
         <p>查詢後會顯示對應客戶的預覽資訊。</p>
       </section>
@@ -325,7 +325,7 @@
       <input id="file-input" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status">尚未綁定共用 Excel 檔案。</p>
+        <p id="status" class="status-message">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
 
@@ -368,7 +368,7 @@
       <input id="file-input-lunfei" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-lunfei" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-lunfei">尚未綁定共用 Excel 檔案。</p>
+        <p id="status-lunfei" class="status-message">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -408,7 +408,7 @@
       <input id="file-input-bng" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-bng" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-bng">尚未綁定共用 Excel共用 Excel 檔案。</p>
+        <p id="status-bng" class="status-message">尚未綁定共用 Excel共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -449,7 +449,7 @@
       <input id="file-input-chg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-chg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-chg">尚未綁定共用 Excel 檔案。</p>
+        <p id="status-chg" class="status-message">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -490,7 +490,7 @@
       <input id="file-input-hmg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-hmg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-hmg">尚未綁定赫星 Excel 檔案。</p>
+        <p id="status-hmg" class="status-message">尚未綁定赫星 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -532,7 +532,7 @@
       <input id="file-input-clg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-clg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-clg">可直接使用自定義序號生成</p>
+        <p id="status-clg" class="status-message">可直接使用自定義序號生成</p>
       </div>
     </section>
     <section class="card">

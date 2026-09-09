@@ -1,10 +1,16 @@
 # Update History / 更新紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.40
+**Version:** 0.3.41
 **Last Updated:** 2026-09-09
 
 ---
+
+## v0.3.41 (2026-09-09)
+- refactor(css): 移除 `main.css` 的 ID selector，改由 index.html 提供低特異性語意 class；既有 id 保留給 JavaScript DOM 定位
+- refactor(css): 六客戶首頁主題統一設定 `--home-theme-accent`，surface 與 status 共用同一組樣式規則
+- refactor(css): 版面、控制元件、間距、字級與 breakpoint 由固定 px 轉為 rem；僅保留像素邊線與膠囊圓角
+- test: 擴充前端 P1 regression，防止 ID selector、主題變數缺漏及固定版面 px 值回歸
 
 ## v0.3.40 (2026-09-09)
 - fix(core): 500 錯誤對外只回傳固定 `INTERNAL_ERROR`，完整例外與 traceback 改由伺服器 `logger.exception` 記錄

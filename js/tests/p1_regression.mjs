@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 
 const copiedValues = [];
@@ -60,4 +61,22 @@ assert.equal(classes.has("copied"), false, "複製回饋結束後應移除 copie
 await listeners[0].listener({ target: { closest: () => null } });
 assert.equal(copiedValues.length, 1, "非儲存格 click 不應觸發複製");
 
-process.stdout.write("P1 frontend event-delegation regression passed.\n");
+const stylesheet = readFileSync(new URL("../../styles/main.css", import.meta.url), "utf8");
+assert.doesNotMatch(stylesheet, /^\s*#[A-Za-z_-][\w-]*/m, "CSS 不應使用 ID 選擇器");
+
+for (const customer of ["yingbang", "lunfei", "bng", "chg", "hmg", "clg"]) {
+  assert.match(
+    stylesheet,
+    new RegExp(`\\.home-theme-${customer}\\s*\\{[^}]*--home-theme-accent:`, "s"),
+    `${customer} 主題應透過 --home-theme-accent 設定`
+  );
+}
+
+const fixedLayoutPixels = stylesheet
+  .split("\n")
+  .filter((line) => /\d+(?:\.\d+)?px/.test(line))
+  .filter((line) => !/^\s*(?:border(?:-(?!radius)[\w-]+)?|outline|box-shadow)\s*:/.test(line))
+  .filter((line) => !/^\s*border-radius:\s*999px/.test(line));
+assert.deepEqual(fixedLayoutPixels, [], "版面與字級尺寸應使用 rem/em，僅保留像素邊線與膠囊圓角");
+
+process.stdout.write("P1 frontend event-delegation and CSS regression passed.\n");

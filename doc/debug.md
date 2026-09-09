@@ -1,7 +1,7 @@
 # Debug Log / 錯誤紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.40
+**Version:** 0.3.41
 **Last Updated:** 2026-09-09
 
 ---
@@ -13,6 +13,48 @@
 ---
 
 ## ✅ Resolved Bugs
+
+### BUG-20260909-010 — CSS ID selector 造成高特異性
+
+**Severity:** P2 / Maintainability
+
+**Affected:** `index.html`, `styles/main.css`
+
+**Root Cause:** 狀態、首頁搜尋、主題容器與列印模式直接用 DOM id 套用樣式，使後續元件覆寫需要更高特異性。
+
+**Fix:** 保留 id 給 JavaScript 定位，同時加入語意 class；stylesheet 全面改用 class selector。
+
+**Verification:** 靜態 regression 驗證 `main.css` 不存在以 `#` 開頭的 ID selector。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-011 — 客戶首頁主題規則重複
+
+**Severity:** P2 / Maintainability
+
+**Affected:** `styles/main.css`
+
+**Root Cause:** 各客戶分別重複宣告相同的 border 與 status 規則，只差色碼。
+
+**Fix:** yingbang、lunfei、bng、chg、hmg、clg 主題 class 僅設定 `--home-theme-accent`，共用元件統一讀取變數。
+
+**Verification:** 靜態 regression 驗證六個主題 class 均定義 accent 變數，且共用規則只保留一份。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-012 — 固定 px 尺寸不利縮放與響應式顯示
+
+**Severity:** P2 / Responsive UX
+
+**Affected:** `styles/main.css`
+
+**Root Cause:** 版面寬高、間距、字級、控制元件與 breakpoint 大量採固定 px，不會隨根字級設定縮放。
+
+**Fix:** 可縮放尺寸換算為 rem；1px/2px 邊線、outline、inset shadow 與 999px 膠囊圓角保留為刻意的像素視覺細節。
+
+**Verification:** 靜態 regression 逐行檢查 px，拒絕新增非允許用途的固定像素值。
+
+**Resolved:** 2026-09-09
 
 ### BUG-20260909-007 — 500 response 洩漏內部例外資訊
 

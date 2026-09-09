@@ -1,6 +1,6 @@
 # SN-GENERATOR 前端代碼地圖 (Front-End Code Map)
 
-**Version:** 0.3.40
+**Version:** 0.3.41
 **Last Updated:** 2026-09-09
 
 ---
@@ -147,3 +147,10 @@ Major event bindings from `initEvents()` in `app.js` categorized by:
 - `bindSheetCopyCellsIn()` 在每個預覽 root 僅註冊一次 `click` listener，透過 `closest('.copyable-cell')` 處理目前及後續動態產生的所有儲存格；重複 bind 不會增加 listener。
 - 自訂頁籤的 localStorage、HTML-to-text 遷移、索引解析與 CRUD 已從 `app.js` 移至 `previewCustomTabs.js`，主檔由 3,571 行降至 3,355 行。
 - `app.js` 仍包含多客戶流程與匯出協調，後續拆分工作持續列於 T69，不視為完全結案。
+
+## 10. CSS 架構與響應式規則
+
+- `id` 僅供 JavaScript DOM 定位；`main.css` 使用 `.status-message`、`.home-search-type`、`.home-theme-surface` 等語意 class，降低特異性並便於元件覆寫。
+- 六客戶主題 class 只設定 `--home-theme-accent`，共用 surface 與 status 規則統一讀取該變數，不再為每個客戶複製相同宣告。
+- 版面寬高、間距、字級與 mobile breakpoint 使用 `rem`；只在 1px/2px 邊線、outline、inset shadow 與 999px 膠囊圓角保留像素值。
+- `js/tests/p1_regression.mjs` 會阻止 ID selector、重複主題結構及新的固定版面 px 值回歸。

@@ -1,7 +1,7 @@
 # Development Process Guide / 開發流程指南
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.40
+**Version:** 0.3.41
 **Last Updated:** 2026-09-09
 
 ---
@@ -155,6 +155,9 @@ Step 3: 找到原因後，更新 doc/debug.md
 - [ ] **500 錯誤不得外洩例外內容** — 客戶端只接收固定訊息，完整堆疊僅寫入伺服器 logger
 - [ ] **上傳限制採實際資料量驗證** — 不只信任 Content-Length，並限制檔案位元組與 XLSX 解壓後總量
 - [ ] **動態 HTTP Header 值移除控制字元** — 檔名等輸入必須排除 ASCII 0–31 與 127
+- [ ] **CSS 使用低特異性語意 class** — `id` 保留給 DOM 定位，不作為樣式選擇器
+- [ ] **客戶主題由 Custom Properties 驅動** — 共用元件只讀取主題變數，不複製客戶規則
+- [ ] **響應式尺寸使用 rem/em** — 版面、間距與字級避免固定 px；1px 邊線等視覺細節可保留
 
 ---
 
