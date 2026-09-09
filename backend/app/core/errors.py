@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Dict, Optional
 
 from fastapi.encoders import jsonable_encoder
@@ -8,6 +9,9 @@ from starlette import status
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.responses import fail
+
+
+logger = logging.getLogger(__name__)
 
 
 class AppError(Exception):
@@ -54,8 +58,14 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(Exception)
-    async def handle_unexpected_error(_: Request, exc: Exception) -> JSONResponse:
+    async def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception(
+            "未預期的伺服器錯誤：%s %s",
+            request.method,
+            request.url.path,
+            exc_info=(type(exc), exc, exc.__traceback__),
+        )
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content=fail("INTERNAL_ERROR", "伺服器發生未預期錯誤", {"error": str(exc)}).model_dump(),
+            content=fail("INTERNAL_ERROR", "伺服器發生未預期錯誤").model_dump(),
         )

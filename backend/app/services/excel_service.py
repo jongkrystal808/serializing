@@ -1,7 +1,9 @@
+from __future__ import annotations
+
 from io import BytesIO
 from pathlib import Path
 from typing import Dict, List
-from zipfile import BadZipFile
+from zipfile import BadZipFile, ZipFile
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
@@ -96,7 +98,15 @@ class ExcelService:
                 status_code=404,
                 details={"path": cfg.path},
             )
-        file_bytes = file_path.read_bytes()
+        with file_path.open("rb") as file_stream:
+            file_bytes = file_stream.read(settings.max_excel_upload_bytes + 1)
+        if len(file_bytes) > settings.max_excel_upload_bytes:
+            raise AppError(
+                "預設 Excel 檔案過大",
+                code="FILE_TOO_LARGE",
+                status_code=413,
+                details={"max_file_bytes": settings.max_excel_upload_bytes},
+            )
         payload = ParseExcelRequest(
             customer=customer,
             sheet_name=cfg.sheet_name,
@@ -206,6 +216,7 @@ class ExcelService:
     @staticmethod
     def _load_xlsx_workbook(file_bytes: bytes):
         try:
+            ExcelService._validate_xlsx_archive(file_bytes)
             return load_workbook(
                 filename=BytesIO(file_bytes),
                 data_only=True,
@@ -213,6 +224,23 @@ class ExcelService:
             )
         except (BadZipFile, InvalidFileException, OSError, ValueError):
             raise
+
+    @staticmethod
+    def _validate_xlsx_archive(
+        file_bytes: bytes,
+        max_uncompressed_bytes: int | None = None,
+    ) -> None:
+        """【用途】載入 workbook 前限制 ZIP 解壓後總量，降低 Zip Bomb 風險。"""
+        limit = max_uncompressed_bytes or settings.max_excel_uncompressed_bytes
+        with ZipFile(BytesIO(file_bytes)) as archive:
+            total_size = sum(item.file_size for item in archive.infolist())
+        if total_size > limit:
+            raise AppError(
+                "Excel 壓縮內容過大",
+                code="EXCEL_ARCHIVE_TOO_LARGE",
+                status_code=413,
+                details={"max_uncompressed_bytes": limit},
+            )
 
     @staticmethod
     def _load_xls_workbook(file_bytes: bytes):

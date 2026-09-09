@@ -1,6 +1,6 @@
 # SN-GENERATOR 前端代碼地圖 (Front-End Code Map)
 
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ---

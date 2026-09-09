@@ -1,7 +1,7 @@
 # Development Process Guide / 開發流程指南
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ---
@@ -152,6 +152,9 @@ Step 3: 找到原因後，更新 doc/debug.md
 - [ ] **不信任內容不可直接寫入 innerHTML** — localStorage、API 與使用者輸入需轉為純文字或先消毒
 - [ ] **同步 I/O 不得放在 async handler** — Excel、SQLite、網路磁碟與同步匯出路由使用普通 `def` 交由 Thread Pool
 - [ ] **大量重複節點使用事件委派** — 表格儲存格等動態集合不得逐一註冊相同 listener
+- [ ] **500 錯誤不得外洩例外內容** — 客戶端只接收固定訊息，完整堆疊僅寫入伺服器 logger
+- [ ] **上傳限制採實際資料量驗證** — 不只信任 Content-Length，並限制檔案位元組與 XLSX 解壓後總量
+- [ ] **動態 HTTP Header 值移除控制字元** — 檔名等輸入必須排除 ASCII 0–31 與 127
 
 ---
 

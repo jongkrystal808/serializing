@@ -1,6 +1,6 @@
 # SN-GENERATOR 後端代碼地圖 (Back-End Code Map)
 
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ---
@@ -9,6 +9,7 @@
 
 ```mermaid
 graph TD
+    UploadLimit["Excel request size middleware"] --> Routers
     Routers["Routers (health, excel, sn, export, history, print_notice)"] --> Services["Services (excel_service, sn_service, export_service, history_service, print_notice_service)"]
     Services --> DB[/"SQLite DB (serial_history, generation_history, print_notice)"/]
     Routers --> Schemas["Schemas (common, excel, sn, export, history, print_notice)"]
@@ -98,12 +99,15 @@ Settings dataclass in `core/config.py`:
 - `db_path`
 - `allowed_customers`
 - `cors_allowed_origins`（來源為 `CORS_ALLOWED_ORIGINS`；禁止 `*`）
+- `max_excel_upload_bytes`（來源為 `MAX_EXCEL_UPLOAD_BYTES`；預設 20 MiB）
+- `max_excel_uncompressed_bytes`（來源為 `MAX_EXCEL_UNCOMPRESSED_BYTES`；預設 100 MiB）
 - `default_excel` paths
 
 ## 8. 錯誤處理 (Error Handling)
 
 - Unified `ApiResponse` error format.
 - Global exception handlers: `AppError`, `ValidationError`, `HTTPException`, `Exception`.
+- 未預期例外對外僅回傳固定 `INTERNAL_ERROR`，完整 traceback 由 `logger.exception` 記錄。
 - Complete error code list (18+ codes) mapping API logic exceptions to user-friendly messages.
 
 ## 9. 端到端資料流 (End-to-End Data Flows)
@@ -132,3 +136,4 @@ Settings dataclass in `core/config.py`:
 - `backend/tests/test_p1_regressions.py`
 - 驗證 Excel、匯出、History、SN、Print Notice 等 10 條同步 I/O 路由皆不是 coroutine handler，確保進入 FastAPI Thread Pool。
 - 驗證純記憶體 `/api/health` 仍為 async handler。
+- `backend/tests/test_p1_security_regressions.py` 驗證 500 資訊不外洩、宣告與實際 request/file 大小限制、XLSX 解壓總量限制及下載檔名控制字元清理。

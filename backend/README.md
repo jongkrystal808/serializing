@@ -19,6 +19,7 @@ docker compose up --build -d
 - Frontend + API gateway: `http://localhost:8080`
 - Health check (through Nginx): `http://localhost:8080/api/health`
 - CORS 預設只允許 `http://localhost:8080` 與 `http://127.0.0.1:8080`；部署到其他網域時，以逗號分隔設定 `CORS_ALLOWED_ORIGINS`，不可使用 `*`。
+- Excel 上傳檔預設限制 20 MiB（`MAX_EXCEL_UPLOAD_BYTES`），XLSX 解壓後總量限制 100 MiB（`MAX_EXCEL_UNCOMPRESSED_BYTES`）；multipart request 另保留 1 MiB metadata 空間。
 
 Stop:
 

@@ -1,7 +1,7 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ---
@@ -26,11 +26,11 @@
 - [x] 抽離自訂頁籤持久化、遷移與 CRUD 至 `previewCustomTabs.js`（完成：2026-09-09）
 - [ ] 持續拆分 `app.js` 中的客戶流程控制器與匯出協調邏輯
 - [ ] 修正資料庫路徑為動態絕對路徑（config.py）
-- [ ] 移除 500 錯誤中的內部資訊洩漏（errors.py）
-- [ ] 加入檔案上傳大小限制
-- [ ] 修正 HTTP Header 注入風險（export.py）
+- [x] 移除 500 錯誤中的內部資訊洩漏，完整堆疊改記錄於 logger（完成：2026-09-09）
+- [x] 加入 request body、實際檔案與 XLSX 解壓後總量三層上傳限制（完成：2026-09-09）
+- [x] 修正 Content-Disposition 檔名控制字元注入風險（完成：2026-09-09）
 
-**Current Result:** 阻塞 I/O 已交由 FastAPI Thread Pool；大表格每個預覽 root 固定一個儲存格 listener；`app.js` 由 3,571 行降至 3,355 行。新增後端 P1 route regression 2/2 與前端事件委派測試，既有 T27 integration 7/7 通過。
+**Current Result:** 阻塞 I/O 已交由 FastAPI Thread Pool；大表格每個預覽 root 固定一個儲存格 listener；`app.js` 由 3,571 行降至 3,355 行。500 錯誤不再外洩例外內容，Excel 上傳加入三層容量限制，下載檔名會移除控制字元。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端事件委派測試通過。
 
 ---
 

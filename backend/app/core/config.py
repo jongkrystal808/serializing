@@ -3,6 +3,18 @@ from dataclasses import dataclass, field
 from typing import Dict, List
 
 
+def _read_positive_int(name: str, default: int) -> int:
+    """【用途】讀取必須為正整數的環境設定。"""
+    raw_value = os.getenv(name, str(default)).strip()
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise ValueError(f"{name} 必須為正整數") from error
+    if value <= 0:
+        raise ValueError(f"{name} 必須大於 0")
+    return value
+
+
 def _read_cors_allowed_origins() -> tuple[str, ...]:
     """從環境變數讀取明確允許的前端來源。"""
     raw_value = os.getenv(
@@ -31,6 +43,17 @@ class Settings:
     db_path: str = "backend/data/sn_generator.db"
     allowed_customers: tuple[str, ...] = ("yingbang", "lunfei", "bng", "chg", "hmg", "clg")
     cors_allowed_origins: tuple[str, ...] = field(default_factory=_read_cors_allowed_origins)
+    max_excel_upload_bytes: int = field(
+        default_factory=lambda: _read_positive_int("MAX_EXCEL_UPLOAD_BYTES", 20 * 1024 * 1024)
+    )
+    max_excel_uncompressed_bytes: int = field(
+        default_factory=lambda: _read_positive_int("MAX_EXCEL_UNCOMPRESSED_BYTES", 100 * 1024 * 1024)
+    )
+
+    @property
+    def max_excel_request_bytes(self) -> int:
+        """【用途】允許 multipart metadata 的額外空間，同時限制整體 request body。"""
+        return self.max_excel_upload_bytes + 1024 * 1024
 
     default_excel: Dict[str, CustomerFileConfig] = field(default_factory=lambda: {
         "yingbang": CustomerFileConfig(

@@ -1,6 +1,6 @@
 # SN-GENERATOR (序號產生器) 系統架構設計文件
 
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ## 1. 系統架構總覽 (Architecture Overview)
@@ -62,7 +62,7 @@ SN-GENERATOR/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py (FastAPI app, CORS, exception handlers, router mounts)
-│   │   ├── core/ (config.py, errors.py, responses.py)
+│   │   ├── core/ (config.py, errors.py, request_limits.py, responses.py)
 │   │   ├── routers/ (health, excel, sn, export, history, print_notice)
 │   │   ├── schemas/ (common, excel, sn, export, history, print_notice)
 │   │   └── services/ (excel_service, sn_service, export_service, history_service, print_notice_service)
@@ -141,6 +141,8 @@ SN-GENERATOR/
 - **Linux 實體機 (Bare Metal)**: 亦支援於 Linux 原生環境直接利用 Uvicorn/Gunicorn 及本機 Nginx 服務直接啟動。
 - **CORS**: 啟用 credentials 時只接受 `CORS_ALLOWED_ORIGINS` 明確列出的來源；預設為 `http://localhost:8080,http://127.0.0.1:8080`，設定值若包含 `*` 會在啟動時拒絕載入。
 - **路由執行模型**: 會呼叫 Excel parser、SQLite、檔案系統或同步匯出的 handler 使用普通 `def`，由 FastAPI/Starlette 放入 Thread Pool；純記憶體 `/api/health` 保留 `async def`，避免被繁忙 worker thread 拖慢。
+- **Excel 上傳防護**: `/api/excel/parse` 以 ASGI middleware 限制整體 request body，路由再以實際讀取量限制檔案為 20 MiB；XLSX 在交給 openpyxl 前另限制 ZIP 解壓後總量為 100 MiB。兩項上限可由環境變數調整。
+- **錯誤與下載標頭安全**: 未預期例外只在伺服器 logger 保留堆疊，對外固定回傳 `INTERNAL_ERROR`；下載檔名在組成 `Content-Disposition` 前移除 ASCII 控制字元、引號與反斜線。
 
 ## 10. 關鍵架構決策 (Key Architectural Decisions - ADR)
 
@@ -180,9 +182,13 @@ SN-GENERATOR/
 - ADR-032: 同步 I/O API handler 使用 FastAPI Thread Pool，health check 保持輕量 async (已落地)
 - ADR-033: 自訂頁籤持久化、遷移與 CRUD 從 app.js 抽離為 previewCustomTabs controller (已落地)
 - ADR-034: 大表格儲存格複製採預覽根節點事件委派，listener 數量固定為 O(1) (已落地)
+- ADR-035: 未預期例外採對外固定訊息、對內 logger.exception 完整記錄 (已落地)
+- ADR-036: Excel 上傳採 request body、實際檔案及 XLSX 解壓總量三層限制 (已落地)
+- ADR-037: Content-Disposition 動態檔名先移除 ASCII 控制字元再編碼 (已落地)
 
 ## 11. 錯誤處理 (Error Handling)
 
 - **統一回傳格式**: 所有 API 錯誤皆封裝於統一的 `ApiResponse` 結構中。
 - **全域攔截**: FastAPI 實作了全域例外攔截器 (Global Exception Handlers)，捕捉 Pydantic 驗證錯誤與自訂的業務邏輯錯誤。
+- **資訊最小化**: 500 response 不包含 `str(exc)`、檔案路徑或資料庫資訊；完整例外與 traceback 僅記錄於伺服器端。
 - **錯誤代碼**: 定義標準的 Error Codes 列表，方便前端根據特定錯誤碼進行對應的 UI 提示或重試機制。

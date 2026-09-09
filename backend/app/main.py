@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.errors import register_exception_handlers
+from app.core.request_limits import ExcelUploadSizeLimitMiddleware
 from app.routers import (
     excel_router,
     export_router,
@@ -17,6 +18,10 @@ app = FastAPI(
     version=settings.app_version,
 )
 
+app.add_middleware(
+    ExcelUploadSizeLimitMiddleware,
+    max_body_bytes=settings.max_excel_request_bytes,
+)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_allowed_origins),

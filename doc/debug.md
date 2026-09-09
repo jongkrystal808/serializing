@@ -1,7 +1,7 @@
 # Debug Log / 錯誤紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ---
@@ -13,6 +13,48 @@
 ---
 
 ## ✅ Resolved Bugs
+
+### BUG-20260909-007 — 500 response 洩漏內部例外資訊
+
+**Severity:** P1 / Security
+
+**Affected:** `backend/app/core/errors.py`
+
+**Root Cause:** 全域未預期例外 handler 將 `str(exc)` 放入 response details，可能暴露檔案路徑、SQL 或底層服務資訊。
+
+**Fix:** 對外固定回傳 `INTERNAL_ERROR` 與通用中文訊息；request method、path、完整例外及 traceback 僅由伺服器 `logger.exception` 記錄。
+
+**Verification:** 回歸測試注入含敏感字串的例外，確認 response 不含敏感內容且 server log 保留診斷資訊。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-008 — Excel 上傳無容量限制可造成記憶體耗盡
+
+**Severity:** P1 / Security & Stability
+
+**Affected:** `backend/app/core/request_limits.py`, `backend/app/routers/excel.py`, `backend/app/services/excel_service.py`
+
+**Root Cause:** `/api/excel/parse` 無條件讀取整個 UploadFile，且 openpyxl 載入前未限制 XLSX ZIP 解壓後總量；只檢查客戶端 Content-Length 也可被省略或偽造。
+
+**Fix:** ASGI middleware 先限制整體 request body；路由最多讀取設定上限加 1 byte 並驗證實際資料量；XLSX 載入前彙總 `ZipInfo.file_size` 限制解壓後總量。預設分別為 20 MiB 與 100 MiB。
+
+**Verification:** 回歸測試涵蓋超大 Content-Length、未提供可信 size 的超量實際資料，以及壓縮後小但解壓後超限的 XLSX。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-009 — Content-Disposition 檔名可注入控制字元
+
+**Severity:** P1 / Security
+
+**Affected:** `backend/app/routers/export.py`
+
+**Root Cause:** 下載檔名僅替換雙引號與反斜線，未排除 CR、LF、NUL 與其他 ASCII 控制字元。
+
+**Fix:** 在建立 ASCII fallback 與 UTF-8 編碼檔名前，統一將 ASCII 0–31、127、雙引號與反斜線替換為底線。
+
+**Verification:** 回歸測試以含 CR/LF/NUL/DEL 的檔名匯出，確認 response header 不含任何控制字元。
+
+**Resolved:** 2026-09-09
 
 ### BUG-20260909-004 — 同步 I/O 阻塞 FastAPI Event Loop
 
@@ -114,4 +156,4 @@ node --check js\modules\previewCustomTabs.js
 node --experimental-default-type=module js\tests\p1_regression.mjs
 ```
 
-目前結果：P0/P1 regression 5/5、T27 integration 7/7、前端事件委派 regression 與 JavaScript syntax checks 全數通過。
+目前結果：P0/P1 regression 10/10、T27 integration 7/7、前端事件委派 regression 與 JavaScript syntax checks 全數通過。

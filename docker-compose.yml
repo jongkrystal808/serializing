@@ -9,6 +9,8 @@ services:
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
       - CORS_ALLOWED_ORIGINS=http://localhost:8080
+      - MAX_EXCEL_UPLOAD_BYTES=20971520
+      - MAX_EXCEL_UNCOMPRESSED_BYTES=104857600
     volumes:
       - ./backend/data:/app/backend/data
     networks:

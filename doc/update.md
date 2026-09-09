@@ -1,10 +1,16 @@
 # Update History / 更新紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.39
+**Version:** 0.3.40
 **Last Updated:** 2026-09-09
 
 ---
+
+## v0.3.40 (2026-09-09)
+- fix(core): 500 錯誤對外只回傳固定 `INTERNAL_ERROR`，完整例外與 traceback 改由伺服器 `logger.exception` 記錄
+- fix(excel): Excel 上傳新增整體 request body、實際檔案 20 MiB 與 XLSX 解壓後 100 MiB 三層限制；上限可由環境變數設定
+- fix(export): `Content-Disposition` 檔名先清除 ASCII 控制字元、引號與反斜線，再產生 ASCII fallback 與 RFC 5987 編碼值
+- test: 新增 5 項安全回歸測試；後端 P0/P1 unit 10/10、T27 integration 7/7 通過
 
 ## v0.3.39 (2026-09-09)
 - perf(api): 將 Excel、Export、History、SN 與 Print Notice 的同步 I/O handler 改為普通 `def`，交由 FastAPI Thread Pool；輕量 health check 保持 async
