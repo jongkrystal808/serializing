@@ -1,4 +1,4 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Generic, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,8 +13,15 @@ class ErrorDetail(StrictBaseModel):
     details: Optional[Dict[str, Any]] = None
 
 
-class ApiResponse(StrictBaseModel):
+DataT = TypeVar("DataT")
+
+
+class ApiResponse(StrictBaseModel, Generic[DataT]):
     success: bool = True
     message: str = "ok"
-    data: Dict[str, Any] = Field(default_factory=dict)
+    data: DataT
     error: Optional[ErrorDetail] = None
+
+
+class HealthData(StrictBaseModel):
+    status: str

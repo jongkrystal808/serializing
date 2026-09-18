@@ -19,3 +19,17 @@ class PrintNoticeEntry(StrictBaseModel):
     workorder_label: str
     workorder_value: str
     created_at: str
+
+
+class PrintNoticeListData(StrictBaseModel):
+    entries: list[PrintNoticeEntry]
+
+
+class PrintNoticeUpsertData(StrictBaseModel):
+    entry: PrintNoticeEntry
+
+
+class PrintNoticeDeleteData(StrictBaseModel):
+    customer: str
+    workorder_value: str
+    removed: bool

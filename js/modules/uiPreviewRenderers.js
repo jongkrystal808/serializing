@@ -1,5 +1,5 @@
 import { CONFIG } from "../config.js";
-import { escapeHtml, escapeHtmlAttribute } from "./utils.js";
+import { escapeHtml, escapeHtmlAttribute, normalizeRangeText } from "./utils.js";
 import { getCustomerProfileByKey } from "./customers.js";
 import { splitBngModelAndRemark } from "./bngReceipt.js";
 import { replaceChildrenFromTrustedTemplate } from "./dom.js";
@@ -36,7 +36,7 @@ function getSheetHeaders(rows) {
   return ordered;
 }
 
-function renderSheetContentPane(rows) {
+export function renderSheetContentPane(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
     return `<div class="error-box">尚無表格資料，請先讀取來源檔。</div>`;
   }
@@ -119,9 +119,9 @@ function renderCustomerSearchSuccessLayout(panelElement, options) {
     ${renderPrintedToggle(printNotice || {})}
     ${headlineHtml}
     ${renderPreviewTabs(customerKey, hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">${previewHtml}</div>
-    <div class="preview-pane" data-pane="sheet">${renderSheetContentPane(rowData)}</div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">${renderHistoryPane(generationHistory, clearHistoryButtonId)}</div>` : ""}
+    <div class="preview-pane active" id="${getPreviewPaneId(customerKey, "preview")}" data-pane="preview" role="tabpanel" aria-labelledby="${getPreviewTabId(customerKey, "preview")}">${previewHtml}</div>
+    <div class="preview-pane" id="${getPreviewPaneId(customerKey, "sheet")}" data-pane="sheet" role="tabpanel" aria-labelledby="${getPreviewTabId(customerKey, "sheet")}" hidden>${renderSheetContentPane(rowData)}</div>
+    ${hasHistory ? `<div class="preview-pane" id="${getPreviewPaneId(customerKey, "history")}" data-pane="history" role="tabpanel" aria-labelledby="${getPreviewTabId(customerKey, "history")}" hidden>${renderHistoryPane(generationHistory, clearHistoryButtonId)}</div>` : ""}
     ${renderCustomPreviewPanes(customerKey, customTabs)}
   `);
 }
@@ -218,20 +218,32 @@ function getConfiguredPreviewTabs(customerKey) {
 }
 
 function renderPreviewTabs(customerKey, hasHistory, customTabs) {
+  const renderTab = (tabId, label, className = "") => {
+    const isActive = tabId === "preview";
+    return `<button type="button" class="preview-tab${className}" id="${getPreviewTabId(customerKey, tabId)}" data-tab="${escapeHtmlAttribute(tabId)}" role="tab" aria-selected="${isActive}" aria-controls="${getPreviewPaneId(customerKey, tabId)}" tabindex="${isActive ? "0" : "-1"}">${escapeHtml(label)}</button>`;
+  };
   const customTabButtons = (customTabs || [])
-    .map((tab) => `<button type="button" class="preview-tab preview-tab-custom" data-tab="${escapeHtmlAttribute(tab.tabId)}">${escapeHtml(tab.label)}</button>`)
+    .map((tab) => renderTab(tab.tabId, tab.label, " preview-tab-custom"))
     .join("");
   return `
     <div class="preview-tabs-row">
-      <div class="preview-tabs">
-        <button type="button" class="preview-tab active" data-tab="preview">預覽</button>
-        <button type="button" class="preview-tab" data-tab="sheet">表格內容</button>
-        ${hasHistory ? '<button type="button" class="preview-tab" data-tab="history">生成歷史</button>' : ""}
+      <div class="preview-tabs" role="tablist" aria-label="預覽內容">
+        ${renderTab("preview", "預覽", " active")}
+        ${renderTab("sheet", "表格內容")}
+        ${hasHistory ? renderTab("history", "生成歷史") : ""}
         ${customTabButtons}
       </div>
       <button type="button" class="preview-tab-add" data-action="add-custom-tab" data-customer-key="${escapeHtmlAttribute(customerKey)}">+ 新增頁籤</button>
     </div>
   `;
+}
+
+function getPreviewTabId(customerKey, tabId) {
+  return `${escapeHtmlAttribute(customerKey)}-preview-tab-${escapeHtmlAttribute(tabId)}`;
+}
+
+function getPreviewPaneId(customerKey, tabId) {
+  return `${escapeHtmlAttribute(customerKey)}-preview-pane-${escapeHtmlAttribute(tabId)}`;
 }
 
 function renderCustomPreviewPanes(customerKey, customTabs) {
@@ -244,7 +256,7 @@ function renderCustomPreviewPanes(customerKey, customTabs) {
         ? `<div class="preview-custom-text">${escapeHtml(tab.text).replace(/\n/g, "<br>")}</div>`
         : "";
       return `
-        <div class="preview-pane preview-pane-custom" data-pane="${escapeHtmlAttribute(tab.tabId)}">
+        <div class="preview-pane preview-pane-custom" id="${getPreviewPaneId(customerKey, tab.tabId)}" data-pane="${escapeHtmlAttribute(tab.tabId)}" role="tabpanel" aria-labelledby="${getPreviewTabId(customerKey, tab.tabId)}" hidden>
           ${tab.removable ? `<div class="preview-custom-actions">
             <button
               type="button"
@@ -338,15 +350,31 @@ function buildBngQuantityStatuses(qty, macQty, macBoardQty) {
   };
 }
 
-function renderBngCopyRow({ label, value, copyValue, monospace = false, status = null }) {
+function renderBngCopyRow({ label, value, copyValue, monospace = false, status = null, rangeEndpoints = false }) {
   const displayValue = String(value ?? "").trim();
   const rawCopyValue = String(copyValue ?? displayValue).trim();
+  const endpoints = rangeEndpoints
+    ? normalizeRangeText(rawCopyValue.replace(/(?:～|到|至|→|->)/g, "~")).split("~").map((part) => part.trim())
+    : [];
+  const rangeHtml = endpoints.length === 2 && endpoints.every(Boolean)
+    ? endpoints.map((endpoint, index) => {
+        const endpointLabel = index === 0 ? "第一位" : "最後一位";
+        return `<button
+          type="button"
+          class="copy-btn bng-copy-btn bng-range-endpoint"
+          data-copy-value="${escapeHtmlAttribute(endpoint)}"
+          data-copied-text="${escapeHtmlAttribute(endpoint)}"
+          title="複製 ${escapeHtmlAttribute(label)}${endpointLabel}"
+          aria-label="複製 ${escapeHtmlAttribute(label)}${endpointLabel}"
+        >${escapeHtml(endpoint)}</button>`;
+      }).join(' <span aria-hidden="true">→</span> ')
+    : escapeHtml(displayValue || "-");
   const valueClass = monospace ? "bng-copy-value bng-copy-value-mono" : "bng-copy-value";
   return `
     <div class="bng-copy-row">
       <div class="bng-copy-row-main">
         <p class="bng-copy-label">${escapeHtml(label)}</p>
-        <p class="${valueClass}">${escapeHtml(displayValue || "-")}</p>
+        <p class="${valueClass}">${rangeHtml}</p>
       </div>
       <div class="bng-copy-row-actions">
         ${renderBngStatusBadge(status)}
@@ -390,6 +418,51 @@ function renderBngCopySection(title, rows) {
       </div>
     </section>
   `;
+}
+
+function getSourceFieldGroup(label) {
+  const text = String(label ?? "").replace(/\s+/g, "").toLowerCase();
+  if (/(s\/n|sn|mac|bios|firmware|fw|版本|備註|remark|tp)/i.test(text)) return "serial";
+  if (/(qty|q'ty|數量|交期|日期|date)/i.test(text)) return "production";
+  return "identity";
+}
+
+// 【用途】讓通用來源沿用超恩的分類卡片與預覽／原始資料頁籤。
+export function renderGenericSourceSearchSuccess(panelElement, { source, query, rows }) {
+  const matchedRows = Array.isArray(rows) ? rows : [];
+  const firstRow = matchedRows[0] || {};
+  const fields = Object.entries(firstRow).map(([label, value]) => ({
+    label,
+    value: String(value ?? "").trim(),
+    copyValue: String(value ?? "").trim(),
+    monospace: true,
+    group: getSourceFieldGroup(label)
+  }));
+  const sections = [
+    ["identity", "工單與產品資訊"],
+    ["production", "數量與交期"],
+    ["serial", "序號、版本與備註"]
+  ].filter(([group]) => fields.some((field) => field.group === group && field.value))
+    .map(([group, title]) => renderBngCopySection(title, fields.filter((field) => field.group === group)))
+    .join("");
+  const primary = fields.find((field) => /(工單|製令|(^|[^a-z])mo([^a-z]|$))/i.test(field.label) && field.value) || fields.find((field) => field.value);
+  const secondary = fields.find((field) => field !== primary && field.value);
+
+  renderCustomerSearchSuccessLayout(panelElement, {
+    customerKey: source.key,
+    title: `${source.label}預覽窗格`,
+    queryLabel: "工單 / MO",
+    query,
+    matchCount: matchedRows.length,
+    headlineHtml: `<div class="preview-headline">
+      <p class="preview-title">${escapeHtml(primary?.value || source.label)}</p>
+      ${secondary ? `<p class="preview-subtitle">${escapeHtml(secondary.label)}：${escapeHtml(secondary.value)}</p>` : ""}
+    </div>`,
+    previewHtml: `<div class="bng-preview-groups">${sections}</div>`,
+    rowData: matchedRows,
+    generationHistory: [],
+    matchedRows
+  });
 }
 
 function formatBngModelForBox(modelValue) {
@@ -485,7 +558,7 @@ export function renderSearchSuccess(ui, args) {
       <p class="preview-subtitle">${escapeHtml(productName)}</p>
     </div>
     ${renderPreviewTabs("yingbang", hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">
+    <div class="preview-pane active" id="${getPreviewPaneId("yingbang", "preview")}" data-pane="preview" role="tabpanel" aria-labelledby="${getPreviewTabId("yingbang", "preview")}">
       <div class="preview-grid">
         ${renderPreviewItem("SN（第一筆預覽）", previewSN, true)}
         ${renderPreviewItem("Datecode", datecode, true)}
@@ -495,10 +568,10 @@ export function renderSearchSuccess(ui, args) {
         ${renderPreviewItem("QTY", qty, true)}
       </div>
     </div>
-    <div class="preview-pane" data-pane="sheet">
+    <div class="preview-pane" id="${getPreviewPaneId("yingbang", "sheet")}" data-pane="sheet" role="tabpanel" aria-labelledby="${getPreviewTabId("yingbang", "sheet")}" hidden>
       ${renderSheetContentPane(rowData)}
     </div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">${renderHistoryPane(workOrderHistory)}</div>` : ""}
+    ${hasHistory ? `<div class="preview-pane" id="${getPreviewPaneId("yingbang", "history")}" data-pane="history" role="tabpanel" aria-labelledby="${getPreviewTabId("yingbang", "history")}" hidden>${renderHistoryPane(workOrderHistory)}</div>` : ""}
     ${renderCustomPreviewPanes("yingbang", customTabs)}
   `);
 }
@@ -601,6 +674,7 @@ export function renderBngSearchSuccess(ui, args) {
       label: "內裝區間",
       value: snRangeDisplay,
       copyValue: snRange,
+      rangeEndpoints: true,
       monospace: true
     },
     {
@@ -616,6 +690,7 @@ export function renderBngSearchSuccess(ui, args) {
       label: "MAC Address",
       value: macRangeDisplay,
       copyValue: macRange,
+      rangeEndpoints: true,
       monospace: true
     },
     {
@@ -638,6 +713,7 @@ export function renderBngSearchSuccess(ui, args) {
       label: "UUID區間",
       value: uuidRangeDisplay,
       copyValue: uuidRange,
+      rangeEndpoints: true,
       monospace: true
     },
     {
@@ -859,15 +935,15 @@ export function renderHmgSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(model)}</p>
     </div>
     ${renderPreviewTabs("hmg", hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">
+    <div class="preview-pane active" id="${getPreviewPaneId("hmg", "preview")}" data-pane="preview" role="tabpanel" aria-labelledby="${getPreviewTabId("hmg", "preview")}">
       <div class="preview-grid">
         ${previewGridHtml}
       </div>
     </div>
-    <div class="preview-pane" data-pane="sheet">
+    <div class="preview-pane" id="${getPreviewPaneId("hmg", "sheet")}" data-pane="sheet" role="tabpanel" aria-labelledby="${getPreviewTabId("hmg", "sheet")}" hidden>
       ${renderSheetContentPane(rowData)}
     </div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">
+    ${hasHistory ? `<div class="preview-pane" id="${getPreviewPaneId("hmg", "history")}" data-pane="history" role="tabpanel" aria-labelledby="${getPreviewTabId("hmg", "history")}" hidden>
       <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
       <div class="history-actions">
         <button type="button" class="btn-secondary" id="btn-clear-history-hmg">清空歷史序號</button>
@@ -918,15 +994,15 @@ export function renderClgSearchSuccess(ui, args) {
       <p class="preview-title">${escapeHtml(model)}</p>
     </div>
     ${renderPreviewTabs("clg", hasHistory, customTabs)}
-    <div class="preview-pane active" data-pane="preview">
+    <div class="preview-pane active" id="${getPreviewPaneId("clg", "preview")}" data-pane="preview" role="tabpanel" aria-labelledby="${getPreviewTabId("clg", "preview")}">
       <div class="preview-grid">
         ${previewGridHtml}
       </div>
     </div>
-    <div class="preview-pane" data-pane="sheet">
+    <div class="preview-pane" id="${getPreviewPaneId("clg", "sheet")}" data-pane="sheet" role="tabpanel" aria-labelledby="${getPreviewTabId("clg", "sheet")}" hidden>
       ${renderSheetContentPane(rowData)}
     </div>
-    ${hasHistory ? `<div class="preview-pane" data-pane="history">
+    ${hasHistory ? `<div class="preview-pane" id="${getPreviewPaneId("clg", "history")}" data-pane="history" role="tabpanel" aria-labelledby="${getPreviewTabId("clg", "history")}" hidden>
       <ol class="history-list">${generationHistory.map((record) => `<li>${escapeHtml(record)}</li>`).join("")}</ol>
       <div class="history-actions">
         <button type="button" class="btn-secondary" id="btn-clear-history-clg">清空歷史序號</button>

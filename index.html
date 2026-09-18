@@ -1,11 +1,19 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="zh-Hant" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'">
   <title>SN-GENERATOR 序號產生器</title>
+  <script>
+    try {
+      const savedTheme = localStorage.getItem("sn-color-theme");
+      document.documentElement.dataset.theme = ["light", "dark", "colorful"].includes(savedTheme) ? savedTheme : "dark";
+    } catch {}
+  </script>
   <link rel="icon" type="image/png" href="./favicon.png">
-  <link rel="stylesheet" href="./styles/main.css">
+  <link rel="stylesheet" href="./styles/main.css?v=0.3.79">
+  <link rel="stylesheet" href="./styles/toast.css">
   <script>
     const CUSTOMERS = {
       yingbang: {
@@ -218,25 +226,33 @@
     };
     window.CUSTOMERS = CUSTOMERS;
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <script src="./assets/vendor/sheetjs/xlsx.full.min.js" integrity="sha384-vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw"></script>
 </head>
 <body>
 <main class="container">
-  <h1>SN-GENERATOR 序號工具</h1>
+  <header class="app-header">
+    <h1>SN-GENERATOR 序號工具</h1>
+    <label class="theme-control">外觀
+      <select id="theme-select" aria-label="外觀主題">
+        <option value="light">淺色</option>
+        <option value="dark">深色</option>
+        <option value="colorful">多彩</option>
+      </select>
+    </label>
+  </header>
 
   <section class="home-layout">
     <aside class="home-layout-sidebar">
-      <section id="home-print-notice-board" class="card home-print-notice-board" aria-live="polite">
-        <div class="home-print-notice-head">
-          <p class="home-print-notice-title">已列印公告欄</p>
-        </div>
-        <div id="home-print-notice-list" class="home-print-notice-list">
+      <details id="home-print-notice-board" class="card home-print-notice-board" open>
+        <summary class="home-print-notice-head">
+          <span class="home-print-notice-title">已列印公告欄</span>
+        </summary>
+        <div id="home-print-notice-list" class="home-print-notice-list" aria-live="polite">
           <p class="home-print-notice-empty">目前沒有已列印公告。</p>
         </div>
-      </section>
+      </details>
 
-      <section id="home-print-history-panel" class="card" hidden>
+      <section id="home-print-history-panel" class="card collapsible-panel" hidden>
         <h2>列印歷史</h2>
         <p>顯示每週已勾選完成列印的客戶與工單 / MO。</p>
       </section>
@@ -251,24 +267,160 @@
             <select id="home-search-type" class="home-search-type" aria-label="首頁搜尋類型">
               <option value="workorder">工單 / MO</option>
               <option value="model">機種（Model）</option>
+              <option value="customer">客戶</option>
             </select>
-            <input id="home-search-input" class="home-search-input" type="text" placeholder="搜尋全客戶工單 / MO">
+            <input id="home-search-input" class="home-search-input" type="search" placeholder="搜尋全客戶工單 / MO" autofocus autocomplete="off" spellcheck="false">
             <button id="btn-home-query" class="btn-search">搜尋</button>
           </div>
           <button id="btn-home-export" disabled>生成序號 & 匯出</button>
           <button id="btn-home-print-bng" class="btn-secondary" disabled>產生收據</button>
         </div>
-        <button id="btn-clg-settings-toggle" type="button" class="btn-secondary clg-settings-entry" aria-expanded="false" aria-controls="clg-serial-settings-card">自定義序號生成</button>
+        <div class="home-tool-entries">
+          <button id="btn-shipment-refresh" type="button" class="btn-secondary">更新資料</button>
+          <button id="btn-shipment-source-toggle" type="button" class="btn-secondary" aria-expanded="false" aria-controls="shipment-source-maintenance-card" hidden>資料來源維護</button>
+          <button id="btn-vecow-link-toggle" type="button" class="btn-secondary" aria-expanded="false" aria-controls="vecow-link-maintenance-card" hidden>超恩連結維護</button>
+          <button id="btn-clg-settings-toggle" type="button" class="btn-secondary clg-settings-entry" aria-expanded="false" aria-controls="clg-serial-settings-card">自定義序號生成</button>
+          <button id="btn-koya-model-toggle" type="button" class="btn-secondary" aria-expanded="false" aria-controls="koya-model-maintenance-card" hidden>KOYA 型號維護</button>
+          <button id="btn-nyx-model-toggle" type="button" class="btn-secondary" aria-expanded="false" aria-controls="nyx-model-maintenance-card" hidden>NYX 型號維護</button>
+        </div>
+        <p id="shipment-last-updated" class="status-message shipment-last-updated" aria-live="polite">最近更新：尚無總表更新日期</p>
+        <div id="shipment-refresh-progress" class="shipment-refresh-progress" aria-live="polite" hidden>
+          <div class="shipment-refresh-progress-head">
+            <span id="shipment-refresh-stage">資料尚未更新</span>
+            <span id="shipment-refresh-percent">0%</span>
+          </div>
+          <progress id="shipment-refresh-progress-bar" max="100" value="0">0%</progress>
+          <p id="shipment-refresh-message" class="status-message">按下「更新資料」後，系統會在背景重建出貨記錄總表。</p>
+        </div>
         <div class="status-row">
           <span id="home-loading-indicator" class="loading-indicator" aria-hidden="true"></span>
-          <p id="home-status" class="status-message home-status">目前模式：工單 / MO 搜尋（全客戶）。</p>
+          <p id="home-status" class="status-message home-status" role="status" aria-live="polite" aria-atomic="true">目前模式：工單 / MO 搜尋（全客戶）。</p>
         </div>
         <div class="home-footer-actions">
           <button id="btn-home-print-history" type="button" class="btn-secondary">列印歷史</button>
         </div>
       </section>
 
-      <section id="clg-serial-settings-card" class="card" hidden>
+      <section id="vecow-link-maintenance-card" class="card collapsible-panel" hidden>
+        <h2 class="section-title">超恩連結維護</h2>
+        <p class="section-description">設定「VECOW各機種BIOSFW測試程式一覽表」的分享網址。留空儲存可移除連結。</p>
+        <form id="vecow-link-form" class="shipment-source-form">
+          <label class="shipment-source-path-field">一覽表連結
+            <input id="vecow-link-url" type="url" maxlength="2000" placeholder="https://…" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="shipment-source-form-actions"><button id="btn-vecow-link-save" type="submit">儲存連結</button></div>
+        </form>
+        <p id="vecow-link-status" class="status-message" role="status" aria-live="polite">展開後載入連結設定。</p>
+      </section>
+      <section id="shipment-source-maintenance-card" class="card collapsible-panel shipment-source-maintenance" hidden>
+        <h2 class="section-title">資料來源維護</h2>
+        <p class="section-description">設定更新總表時使用的來源位置與讀取範圍。儲存後會從下一次「更新資料」開始生效。</p>
+        <form id="shipment-source-form" class="shipment-source-form">
+          <label id="shipment-source-name-field" hidden>新來源名稱（總表工作表名稱）
+            <input id="shipment-source-name" type="text" maxlength="31" autocomplete="off">
+          </label>
+          <label id="shipment-source-kind-field" hidden>來源類型
+            <select id="shipment-source-kind"><option value="folder">Excel 資料夾</option><option value="file">Excel 檔案</option></select>
+          </label>
+          <label>資料來源
+            <select id="shipment-source-select" required></select>
+          </label>
+          <label id="shipment-source-path-field" class="shipment-source-path-field">來源路徑
+            <input id="shipment-source-path" type="text" maxlength="1000" required autocomplete="off" spellcheck="false">
+          </label>
+          <label id="shipment-source-sheet-field"><span id="shipment-source-sheet-label">工作表</span>
+            <input id="shipment-source-sheet-rule" type="text" maxlength="1000" autocomplete="off" spellcheck="false">
+          </label>
+          <label id="shipment-source-file-field"><span id="shipment-source-file-label">檔名關鍵字</span>
+            <input id="shipment-source-file-rule" type="text" maxlength="300" autocomplete="off" spellcheck="false">
+          </label>
+          <label id="shipment-source-recent-field"><span id="shipment-source-recent-label">最近檔案數</span>
+            <input id="shipment-source-recent-files" type="number" min="1" max="50" step="1">
+          </label>
+          <label>客戶關鍵字（逗號或換行分隔）
+            <textarea id="shipment-source-customer-keywords" rows="2" maxlength="1000" autocomplete="off" spellcheck="false"></textarea>
+          </label>
+          <div id="shipment-source-search-fields" hidden>
+            <label>搜尋／編碼用途<select id="shipment-source-search-customer"><option value="">通用搜尋與預覽</option><option value="deg">泉影 DEG 工單搜尋與編碼</option></select></label>
+            <label>指定搜尋欄名（匯入後；留空搜尋全部欄位）<input id="shipment-source-work-order-column" type="text" maxlength="1000" autocomplete="off" spellcheck="false"></label>
+            <p class="section-description">所有自訂來源更新總表後都可搜尋與預覽。可指定匯入後的欄名，例如 MO，或留空搜尋全部欄位。來源路徑使用 /mnt/netdisk/...。保存後請更新資料。</p>
+          </div>
+          <p id="shipment-source-rule-summary" class="section-description" hidden></p>
+          <fieldset id="shipment-source-rules" class="source-rules-editor" hidden>
+            <legend>自訂來源匯入規則</legend>
+            <label class="source-rule-checkbox"><input name="source-rules-enabled" type="checkbox">啟用欄位與處理規則</label>
+            <p class="section-description">停用時沿用原始全欄匯入。欄位清理與過濾依排列順序執行，欄名請使用改名後的名稱。</p>
+            <div data-rule-settings hidden>
+              <div class="source-rule-grid">
+                <label>選檔策略<select name="source-rule-file_strategy"><option value="merge_recent">合併最近 N 檔</option><option value="latest">僅最新一檔</option><option value="first_valid">回溯第一個有效檔</option></select></label>
+                <label>工作表選擇<select name="source-rule-sheet_mode"><option value="first">第一張</option><option value="exact">完全名稱</option><option value="contains">名稱包含（第一張匹配）</option><option value="list">指定多張合併</option></select></label>
+                <label>工作表比對<select name="source-rule-sheet_match"><option value="exact">完全一致</option><option value="trim_casefold">去前後空白、忽略大小寫</option><option value="compact_casefold">去全部空白、忽略大小寫</option></select></label>
+                <label>工作表清單（每列一張）<textarea name="source-rule-sheet_names" maxlength="20000" rows="3"></textarea></label>
+                <label>表頭模式<select name="source-rule-header_mode"><option value="fixed">指定列</option><option value="scan">掃描關鍵字</option></select></label>
+                <label>表頭第幾列（從 1 起算）<input name="source-rule-header_row" type="number" min="1" max="1000" step="1" value="1" required></label>
+                <label>掃描前幾列<input name="source-rule-scan_rows" type="number" min="1" max="1000" step="1" value="10" required></label>
+                <label>表頭關鍵字（每列一個）<textarea name="source-rule-header_keywords" maxlength="20000" rows="3"></textarea></label>
+                <label>關鍵字條件<select name="source-rule-keyword_condition"><option value="any">任一命中</option><option value="all">全部命中同一列</option></select></label>
+                <label>儲存格命中方式<select name="source-rule-keyword_match"><option value="cell_exact">完全相同</option><option value="cell_contains">包含文字</option></select></label>
+                <label>表頭比對<select name="source-rule-header_match"><option value="trim_casefold">去前後空白、忽略大小寫</option><option value="exact">完全一致</option><option value="compact_casefold">去全部空白、忽略大小寫</option></select></label>
+                <label>輸出欄位<select name="source-rule-column_mode"><option value="all">全部保留（可另外改名）</option><option value="select">只輸出指定欄位</option></select></label>
+                <label>候選欄名比對<select name="source-rule-column_match"><option value="trim_casefold">去前後空白、忽略大小寫</option><option value="exact">完全一致</option><option value="compact_casefold">去全部空白、忽略大小寫</option></select></label>
+                <label>去重<select name="source-rule-deduplicate"><option value="all_columns">按全部輸出欄去重，保留第一筆</option><option value="none">不去重</option></select></label>
+              </div>
+              <label>來源格式<select name="source-rule-input_format"><option value="excel">Excel</option><option value="eml">EML郵件</option><option value="msg">MSG郵件</option><option value="mixed">Excel與郵件混合</option></select></label>
+              <div data-mail-settings hidden>
+                <h3>郵件抽表與局部更新</h3>
+                <p class="section-description">HTML抽表後為「郵件表格」分頁；附件Excel沿用原分頁。局部更新只替換同主題、同鍵資料，須選合併最近N檔策略。</p>
+                <div class="source-rule-params">
+                  <label>抽表位置<select name="source-mail-location"><option value="body_or_attachment">先本文，找不到再附件</option><option value="body">僅本文</option><option value="attachment">僅HTML／Excel附件</option></select></label>
+                  <label>表格選擇<select name="source-mail-table"><option value="first">第一張有效表格</option><option value="widest">欄數最多表格</option></select></label>
+                  <label>最低欄數<input name="source-mail-min_columns" type="number" min="1" max="200" value="1" required></label>
+                  <label>刪除線<select name="source-mail-strike"><option value="mark">保留文字並加刪除標記</option><option value="omit">移除刪除文字</option><option value="text">只保留文字</option></select></label>
+                  <label>回覆前綴（每列一個）<textarea name="source-mail-reply_prefixes">RE
+FW
+FWD</textarea></label>
+                  <label>局部更新鍵（改名後，每列一欄；留空停用）<textarea name="source-mail-update_keys"></textarea></label>
+                  <label><input name="source-mail-base_search" type="checkbox" checked>回溯同主題原始底稿</label>
+                </div>
+              </div>
+              <h3>欄位與改名</h3>
+              <p class="section-description">依排列順序輸出指定欄位。候選欄名依順序匹配；必需欄找不到會停止該來源。</p>
+              <div data-rule-rows="columns"></div><button type="button" class="btn-secondary" data-add-rule="columns">新增欄位</button>
+              <h3>欄位清理</h3>
+              <div data-rule-rows="transforms"></div><button type="button" class="btn-secondary" data-add-rule="transforms">新增清理規則</button>
+              <h3>資料列過濾</h3>
+              <p class="section-description">先清理，再過濾，最後選取輸出欄位；可依未輸出的備註欄排除 Total。</p>
+              <div data-rule-rows="filters"></div><button type="button" class="btn-secondary" data-add-rule="filters">新增過濾規則</button>
+              <h3>儲存格／月份擷取</h3>
+              <p class="section-description">逐檔逐頁補值，在清理與過濾前執行。日期格式範例：%Y-%m-%d → %Y-%m。</p>
+              <div data-rule-rows="cell_values"></div><button type="button" class="btn-secondary" data-add-rule="cell_values">新增儲存格補值</button>
+              <h3>工單拆列與用量計算</h3>
+              <p class="section-description">在過濾後拆列，例如 WO1*10/WO2*20。要覆寫數量或計算用量時，每筆工單都必須標記數量。</p>
+              <div data-rule-rows="splits"></div><button type="button" class="btn-secondary" data-add-rule="splits">新增拆列規則</button>
+              <h3>主檔／Excel對照補值</h3>
+              <p class="section-description">在合併與拆列後補值，最後才選欄與去重。既有型號主檔欄為 model、pn、full_pn（KOYA）；月份主檔欄為 month、value。</p>
+              <div data-rule-rows="lookups"></div><button type="button" class="btn-secondary" data-add-rule="lookups">新增對照補值</button>
+            </div>
+          </fieldset>
+          <div class="shipment-source-form-actions">
+            <button id="btn-shipment-source-new" type="button" class="btn-secondary">新增資料來源</button>
+            <button id="btn-shipment-source-save" type="submit">儲存設定</button>
+            <button id="btn-shipment-source-preview" type="button" class="btn-secondary" hidden>預覽目前規則</button>
+            <button id="btn-shipment-source-reset" type="button" class="btn-secondary">還原預設</button>
+          </div>
+        </form>
+        <div id="shipment-source-preview" class="shipment-source-preview" hidden aria-live="polite"></div>
+        <p class="section-description">來源名稱只決定輸出總表的工作表名稱；要讀取來源 Excel 的哪一張分頁，請另外設定上方的工作表規則。未啟用規則時匯入全部欄位並以第一列為欄名；啟用合併最近 N 檔時，任一選中檔案失敗會停止該來源並嘗試保留舊資料。</p>
+        <p id="shipment-source-status" class="status-message" role="status" aria-live="polite" aria-atomic="true">展開後載入資料來源設定。</p>
+        <div class="koya-model-table-wrap">
+          <table class="koya-model-table shipment-source-table">
+            <thead><tr><th>來源</th><th>路徑</th><th>讀取規則</th><th>操作</th></tr></thead>
+            <tbody id="shipment-source-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="clg-serial-settings-card" class="card collapsible-panel" hidden>
         <h2 class="section-title">自定義序號生成</h2>
         <div class="toolbar clg-serial-toolbar">
           <input id="clg-prefix-input" type="text" placeholder="前綴（可空白）">
@@ -282,37 +434,195 @@
           </select>
           <input id="clg-count-input" class="clg-count-input" type="number" min="1" step="1" value="1" placeholder="要生產幾個序號">
         </div>
+        <div class="toolbar clg-serial-export-toolbar">
+          <label>檔案格式
+            <select id="clg-export-format-select">
+              <option value="xls">XLS</option>
+              <option value="xlsx">XLSX</option>
+            </select>
+          </label>
+          <label>欄位名稱
+            <select id="clg-export-column-select">
+              <option value="SN">SN</option>
+              <option value="LabelName">LabelName</option>
+            </select>
+          </label>
+          <button id="btn-download-clg-serials" type="button">下載所有序號</button>
+        </div>
         <div id="clg-settings-planned-preview-root" class="clg-settings-planned-preview-root"></div>
       </section>
 
-      <section id="home-preview-panel" class="card home-theme-surface">
-        <h2>預覽窗格</h2>
-        <p>查詢後會顯示對應客戶的預覽資訊。</p>
+      <section id="koya-model-maintenance-card" class="card collapsible-panel koya-model-maintenance" hidden>
+        <h2 class="section-title">KOYA 型號主檔維護</h2>
+        <p class="section-description">Model 主檔維護 PN 與 full PN；月份／PO 會從「KOYA出貨」自動帶入，之後可手動編輯。</p>
+        <form id="koya-model-form" class="koya-model-form">
+          <input id="koya-model-original" type="hidden">
+          <label>Model
+            <input id="koya-model-model" type="text" maxlength="100" required autocomplete="off" placeholder="例如 CHG022-XXXX">
+          </label>
+          <label>PN
+            <input id="koya-model-pn" type="text" maxlength="100" required autocomplete="off">
+          </label>
+          <label>full PN
+            <input id="koya-model-full-pn" type="text" maxlength="100" required autocomplete="off">
+          </label>
+          <div class="koya-model-form-actions">
+            <button id="btn-koya-model-save" type="submit">新增資料</button>
+            <button id="btn-koya-model-cancel" type="button" class="btn-secondary" hidden>取消編輯</button>
+          </div>
+        </form>
+        <p id="koya-model-status" class="status-message" role="status" aria-live="polite" aria-atomic="true">正在載入 KOYA 型號主檔…</p>
+        <div class="koya-model-table-wrap">
+          <table class="koya-model-table">
+            <thead>
+              <tr><th>Model</th><th>PN</th><th>full PN</th><th>操作</th></tr>
+            </thead>
+            <tbody id="koya-model-table-body"></tbody>
+          </table>
+        </div>
+        <h3 class="koya-monthly-title">月份／PO 對照</h3>
+        <form id="koya-month-form" class="koya-model-form koya-month-form">
+          <label>月份
+            <input id="koya-month-month" type="text" maxlength="30" required autocomplete="off" placeholder="例如 9月">
+          </label>
+          <label>PO
+            <input id="koya-month-value" type="text" maxlength="100" autocomplete="off">
+          </label>
+          <div class="koya-model-form-actions">
+            <button id="btn-koya-month-save" type="submit">新增月份</button>
+            <button id="btn-koya-month-cancel" type="button" class="btn-secondary" hidden>取消編輯</button>
+          </div>
+        </form>
+        <div class="koya-model-table-wrap">
+          <table class="koya-model-table koya-month-table">
+            <thead><tr><th>月份</th><th>PO</th><th>操作</th></tr></thead>
+            <tbody id="koya-month-table-body"></tbody>
+          </table>
+        </div>
       </section>
 
-      <section id="home-history-panel" class="card" hidden>
+      <section id="nyx-model-maintenance-card" class="card collapsible-panel koya-model-maintenance" hidden>
+        <h2 class="section-title">NYX 型號主檔維護</h2>
+        <p class="section-description">Model 主檔維護 PN；月份會從「KOYA出貨」自動帶入，NYX 的 LOT 可留空後再編輯。</p>
+        <form id="nyx-model-form" class="koya-model-form">
+          <label>Model
+            <input id="nyx-model-model" type="text" maxlength="100" required autocomplete="off" placeholder="例如 CZG202-XXXX">
+          </label>
+          <label>PN
+            <input id="nyx-model-pn" type="text" maxlength="100" required autocomplete="off">
+          </label>
+          <div class="koya-model-form-actions">
+            <button id="btn-nyx-model-save" type="submit">新增資料</button>
+            <button id="btn-nyx-model-cancel" type="button" class="btn-secondary" hidden>取消編輯</button>
+          </div>
+        </form>
+        <p id="nyx-model-status" class="status-message" role="status" aria-live="polite" aria-atomic="true">正在載入 NYX 型號主檔…</p>
+        <div class="koya-model-table-wrap">
+          <table class="koya-model-table">
+            <thead>
+              <tr><th>Model</th><th>PN</th><th>操作</th></tr>
+            </thead>
+            <tbody id="nyx-model-table-body"></tbody>
+          </table>
+        </div>
+        <h3 class="koya-monthly-title">月份／LOT 對照</h3>
+        <form id="nyx-month-form" class="koya-model-form koya-month-form">
+          <label>月份
+            <input id="nyx-month-month" type="text" maxlength="30" required autocomplete="off" placeholder="例如 9月">
+          </label>
+          <label>LOT
+            <input id="nyx-month-value" type="text" maxlength="100" autocomplete="off">
+          </label>
+          <div class="koya-model-form-actions">
+            <button id="btn-nyx-month-save" type="submit">新增月份</button>
+            <button id="btn-nyx-month-cancel" type="button" class="btn-secondary" hidden>取消編輯</button>
+          </div>
+        </form>
+        <div class="koya-model-table-wrap">
+          <table class="koya-model-table koya-month-table">
+            <thead><tr><th>月份</th><th>LOT</th><th>操作</th></tr></thead>
+            <tbody id="nyx-month-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <p><a id="home-vecow-link" target="_blank" rel="noopener noreferrer" hidden>VECOW各機種BIOSFW測試程式一覽表</a></p>
+      <section id="home-preview-shell" class="card home-theme-surface">
+        <div id="home-preview-panel">
+          <h2>預覽窗格</h2>
+          <p>查詢後會顯示對應客戶的預覽資訊。</p>
+        </div>
+        <details id="fzg-serial-card" class="preview-encoder" hidden>
+          <summary class="section-title">勤誠 FZG 序號生成</summary>
+          <p id="fzg-work-order" class="section-description"></p>
+          <form id="fzg-serial-form">
+            <div class="toolbar clg-serial-toolbar">
+              <label>類型 <select name="kind"><option value="customer">客序</option><option value="mac">MAC 序號</option></select></label>
+              <label id="fzg-part-label">料號 <input name="part_number" type="text" maxlength="100" required></label>
+              <label id="fzg-start-label" hidden>MAC 重置起始值（16 進位）<input name="start_hex" type="text" value="200000" pattern="[0-9A-Fa-f]{6}" maxlength="6"></label>
+              <label>數量 <input name="qty" type="number" min="1" max="99999" step="1" value="1" required></label>
+              <button type="submit">生成序號</button>
+            </div>
+          </form>
+          <p id="fzg-status" class="status-message" role="status" aria-live="polite">請確認料號與數量。</p>
+          <label>序號 <textarea id="fzg-output" rows="8" readonly style="width:100%;box-sizing:border-box" spellcheck="false"></textarea></label>
+          <div class="toolbar"><button id="fzg-copy" type="button" class="btn-secondary" disabled>複製序號</button><button id="fzg-view-status" type="button" class="btn-secondary">查看狀態</button><button id="fzg-reset" type="button" class="btn-secondary">重置目前流水號</button></div>
+        </details>
+        <details id="deg-generator-card" class="preview-encoder" hidden>
+          <summary class="section-title">泉影 DEG 序號生成</summary>
+          <p id="deg-rule"></p>
+          <form id="deg-form">
+            <div class="toolbar clg-serial-toolbar">
+              <label>規格 <select name="spec"><option value="hl">HL</option><option value="pizza_box">Pizza Box</option><option value="pizza_carton">Pizza Carton</option></select></label>
+              <label data-deg-specs="hl pizza_box">產品碼／料號 <input name="product" type="text" value="M2A" maxlength="100" required list="deg-products"></label>
+              <datalist id="deg-products"><option value="M2A"><option value="M2B"><option value="M2C"><option value="MPA"><option value="MPB"><option value="MPC"><option value="MEA"><option value="MEB"><option value="MEC"><option value="MLA"><option value="MLB"><option value="MLC"><option value="MBA"><option value="MBB"><option value="C20"><option value="C30"><option value="MG0"><option value="MG1"><option value="MG2"></datalist>
+              <label data-deg-specs="hl pizza_carton">日期碼（HL: YYWW／Carton: YYMMDD）<input name="date_code" type="text" inputmode="numeric" required></label>
+              <label data-deg-specs="pizza_box">年份最後一位 <input name="year_last" type="text" pattern="[0-9]" maxlength="1" required></label>
+              <label data-deg-specs="pizza_box pizza_carton">週數 <input name="week" type="text" pattern="[0-9]{2}" maxlength="2" required></label>
+              <label data-deg-specs="pizza_box">週幾（1~7）<input name="weekday" type="number" min="1" max="7" required></label>
+              <label>起始流水號 <input name="start_serial" type="number" min="1" max="99999" step="1" value="1" required></label>
+              <label>數量 <input name="qty" type="number" min="1" max="100000" step="1" value="1" required></label>
+            </div>
+            <div class="toolbar"><button id="deg-today" type="button" class="btn-secondary">帶入今天日期</button><button id="deg-generate" type="submit">生成序號</button></div>
+          </form>
+          <p>起始流水號由您指定；重複使用同一組設定會產生相同序號，生成前請查看歷史。HL 與 Pizza Box 固定使用 DD 工廠碼。</p>
+          <p id="deg-status" class="status-message" role="status" aria-live="polite">選擇規格並填寫編碼資料。</p>
+          <label>序號預覽 <textarea id="deg-output" rows="8" readonly style="width:100%;box-sizing:border-box" spellcheck="false"></textarea></label>
+          <div class="toolbar"><button id="deg-copy" type="button" disabled>複製所有序號</button><button id="deg-download" type="button" disabled>下載 Excel</button><button id="deg-history" type="button" class="btn-secondary">查看泉影歷史</button></div>
+          <div id="deg-history-output" hidden></div>
+          <details><summary>M.2 M Key Industrial 編碼對照表</summary>
+            <img src="./assets/deg/m2_1.png" alt="M.2 M Key Industrial 對照表第 1 頁" loading="lazy" style="max-width:100%;height:auto">
+            <img src="./assets/deg/m2_2.png" alt="M.2 M Key Industrial 對照表第 2 頁" loading="lazy" style="max-width:100%;height:auto">
+            <img src="./assets/deg/m2_3.png" alt="M.2 M Key Industrial 對照表第 3 頁" loading="lazy" style="max-width:100%;height:auto">
+            <img src="./assets/deg/m2_4.png" alt="M.2 M Key Industrial 對照表第 4 頁" loading="lazy" style="max-width:100%;height:auto">
+          </details>
+        </details>
+      </section>
+
+      <section id="home-history-panel" class="card collapsible-panel" hidden>
         <h2>歷史記憶</h2>
         <p>按「查看歷史」顯示目前查詢目標的歷史資料。</p>
       </section>
     </div>
   </section>
 
+  <!-- Compatibility shell: js/state.js still binds these IDs. Remove sections only after their bindings migrate. -->
   <div id="legacy-root" hidden>
   <section class="card">
     <h2 class="section-title title-with-help">客戶頁籤
       <button type="button" class="help-inline-trigger" data-help-topic="customer-tabs" aria-label="客戶頁籤使用說明" title="查看使用說明">ⅰ</button>
     </h2>
-    <div class="preview-tabs">
-      <button type="button" id="tab-yingbang" class="preview-tab active" data-customer="yingbang">營邦</button>
-      <button type="button" id="tab-lunfei" class="preview-tab" data-customer="lunfei">倫飛</button>
-      <button type="button" id="tab-bng" class="preview-tab" data-customer="bng">超恩</button>
-      <button type="button" id="tab-chg" class="preview-tab" data-customer="chg">KOYA</button>
-      <button type="button" id="tab-hmg" class="preview-tab" data-customer="hmg">赫星</button>
-      <button type="button" id="tab-clg" class="preview-tab" data-customer="clg">Cubepilot</button>
+    <div class="preview-tabs" role="tablist" aria-label="客戶頁籤">
+      <button type="button" id="tab-yingbang" class="preview-tab active" data-customer="yingbang" role="tab" aria-selected="true" aria-controls="yingbang-workspace" tabindex="0">營邦</button>
+      <button type="button" id="tab-lunfei" class="preview-tab" data-customer="lunfei" role="tab" aria-selected="false" aria-controls="lunfei-workspace" tabindex="-1">倫飛</button>
+      <button type="button" id="tab-bng" class="preview-tab" data-customer="bng" role="tab" aria-selected="false" aria-controls="bng-workspace" tabindex="-1">超恩</button>
+      <button type="button" id="tab-chg" class="preview-tab" data-customer="chg" role="tab" aria-selected="false" aria-controls="chg-workspace" tabindex="-1">KOYA</button>
+      <button type="button" id="tab-hmg" class="preview-tab" data-customer="hmg" role="tab" aria-selected="false" aria-controls="hmg-workspace" tabindex="-1">赫星</button>
+      <button type="button" id="tab-clg" class="preview-tab" data-customer="clg" role="tab" aria-selected="false" aria-controls="clg-workspace" tabindex="-1">Cubepilot</button>
     </div>
   </section>
 
-  <section id="yingbang-workspace">
+  <section id="yingbang-workspace" role="tabpanel" aria-labelledby="tab-yingbang">
     <p id="source-hint">已綁定 Excel（Sheet：營邦出貨）</p>
 
     <section class="card">
@@ -325,7 +635,7 @@
       <input id="file-input" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status" class="status-message">尚未綁定共用 Excel 檔案。</p>
+        <p id="status" class="status-message" role="status" aria-live="polite" aria-atomic="true">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
 
@@ -336,7 +646,7 @@
       <div class="toolbar compact-action-bar">
         <button id="btn-history" class="btn-secondary">查看歷史</button>
         <div class="search-group">
-          <input id="search-input" type="text" placeholder="輸入工單號" disabled>
+          <input id="search-input" type="text" placeholder="輸入工單號" disabled autocomplete="off" spellcheck="false">
           <button id="btn-query" class="btn-search" disabled>搜尋</button>
         </div>
         <button id="btn-export" disabled>生成序號 & 匯出</button>
@@ -356,7 +666,7 @@
     </section>
   </section>
 
-  <section id="lunfei-workspace" hidden>
+  <section id="lunfei-workspace" role="tabpanel" aria-labelledby="tab-lunfei" hidden>
     <p>綁定 Excel（Sheet：倫飛出貨）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（倫飛）
@@ -368,7 +678,7 @@
       <input id="file-input-lunfei" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-lunfei" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-lunfei" class="status-message">尚未綁定共用 Excel 檔案。</p>
+        <p id="status-lunfei" class="status-message" role="status" aria-live="polite" aria-atomic="true">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -378,7 +688,7 @@
       <div class="toolbar compact-action-bar">
         <button id="btn-history-lunfei" class="btn-secondary">查看歷史</button>
         <div class="search-group">
-          <input id="search-input-lunfei" type="text" placeholder="輸入 MO" disabled>
+          <input id="search-input-lunfei" type="text" placeholder="輸入 MO" disabled autocomplete="off" spellcheck="false">
           <button id="btn-query-lunfei" class="btn-search" disabled>搜尋</button>
         </div>
         <button id="btn-export-lunfei" disabled>生成序號 & 匯出</button>
@@ -396,7 +706,8 @@
     </section>
   </section>
 
-  <section id="bng-workspace" hidden>
+  <section id="bng-workspace" role="tabpanel" aria-labelledby="tab-bng" hidden>
+    <p><a id="bng-vecow-link" target="_blank" rel="noopener noreferrer" hidden>VECOW各機種BIOSFW測試程式一覽表</a></p>
     <p>已綁定 Excel（Sheet：超恩出貨）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（超恩）
@@ -408,7 +719,7 @@
       <input id="file-input-bng" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-bng" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-bng" class="status-message">尚未綁定共用 Excel共用 Excel 檔案。</p>
+        <p id="status-bng" class="status-message" role="status" aria-live="polite" aria-atomic="true">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -418,7 +729,7 @@
       <div class="toolbar compact-action-bar">
         <button id="btn-history-bng" class="btn-secondary">查看歷史</button>
         <div class="search-group">
-          <input id="search-input-bng" type="text" placeholder="輸入 MO" disabled>
+          <input id="search-input-bng" type="text" placeholder="輸入 MO" disabled autocomplete="off" spellcheck="false">
           <button id="btn-query-bng" class="btn-search" disabled>搜尋</button>
         </div>
         <button id="btn-export-bng" disabled>生成序號 & 匯出</button>
@@ -437,7 +748,7 @@
     </section>
   </section>
 
-  <section id="chg-workspace" hidden>
+  <section id="chg-workspace" role="tabpanel" aria-labelledby="tab-chg" hidden>
     <p>已綁定 Excel（Sheet：KOYA出貨）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（KOYA）
@@ -449,7 +760,7 @@
       <input id="file-input-chg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-chg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-chg" class="status-message">尚未綁定共用 Excel 檔案。</p>
+        <p id="status-chg" class="status-message" role="status" aria-live="polite" aria-atomic="true">尚未綁定共用 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -459,7 +770,7 @@
       <div class="toolbar compact-action-bar">
         <button id="btn-history-chg" class="btn-secondary">查看歷史</button>
         <div class="search-group">
-          <input id="search-input-chg" type="text" placeholder="輸入工單" disabled>
+          <input id="search-input-chg" type="text" placeholder="輸入工單" disabled autocomplete="off" spellcheck="false">
           <button id="btn-query-chg" class="btn-search" disabled>搜尋</button>
         </div>
         <button id="btn-export-chg" disabled>生成序號 & 匯出</button>
@@ -477,7 +788,7 @@
     </section>
   </section>
 
-  <section id="hmg-workspace" hidden>
+  <section id="hmg-workspace" role="tabpanel" aria-labelledby="tab-hmg" hidden>
     <p>已綁定 Excel（Sheet：組測序號編碼）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（赫星）
@@ -490,7 +801,7 @@
       <input id="file-input-hmg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-hmg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-hmg" class="status-message">尚未綁定赫星 Excel 檔案。</p>
+        <p id="status-hmg" class="status-message" role="status" aria-live="polite" aria-atomic="true">尚未綁定赫星 Excel 檔案。</p>
       </div>
     </section>
     <section class="card">
@@ -500,7 +811,7 @@
       <div class="toolbar compact-action-bar">
         <button id="btn-history-hmg" class="btn-secondary">查看歷史</button>
         <div class="search-group">
-          <input id="search-input-hmg" type="text" placeholder="輸入 Model（可關鍵字）" disabled>
+          <input id="search-input-hmg" type="text" placeholder="輸入 Model（可關鍵字）" disabled autocomplete="off" spellcheck="false">
           <button id="btn-query-hmg" class="btn-search" disabled>搜尋機種</button>
         </div>
         <button id="btn-export-hmg" disabled>匯出 HEX</button>
@@ -519,7 +830,7 @@
     </section>
   </section>
 
-  <section id="clg-workspace" hidden>
+  <section id="clg-workspace" role="tabpanel" aria-labelledby="tab-clg" hidden>
     <p>已綁定 Excel（Sheet：板階序號編碼）</p>
     <section class="card">
       <h2 class="section-title title-with-help">資料來源設定（Cubepilot）
@@ -532,7 +843,7 @@
       <input id="file-input-clg" type="file" accept=".xlsx,.xls" hidden>
       <div class="status-row">
         <span id="loading-indicator-clg" class="loading-indicator" aria-hidden="true"></span>
-        <p id="status-clg" class="status-message">可直接使用自定義序號生成</p>
+        <p id="status-clg" class="status-message" role="status" aria-live="polite" aria-atomic="true">可直接使用自定義序號生成</p>
       </div>
     </section>
     <section class="card">
@@ -542,7 +853,7 @@
       <div class="toolbar compact-action-bar">
         <button id="btn-history-clg" class="btn-secondary">查看歷史</button>
         <div class="search-group">
-          <input id="search-input-clg" type="text" placeholder="輸入機種名（可關鍵字）" disabled>
+          <input id="search-input-clg" type="text" placeholder="輸入機種名（可關鍵字）" disabled autocomplete="off" spellcheck="false">
           <button id="btn-query-clg" class="btn-search" disabled>搜尋機種</button>
         </div>
         <button id="btn-export-clg" disabled>生成序號 & 匯出</button>
@@ -563,6 +874,7 @@
   </div>
   <section id="bng-receipt-print-root" class="bng-receipt-print-root" hidden aria-hidden="true"></section>
 </main>
-<script type="module" src="./js/app.js"></script>
+<script type="module" src="./js/app.js?v=0.3.79"></script>
+<script type="module">import { initDegGenerator } from "./js/modules/deg.js?v=0.3.68"; initDegGenerator();</script>
 </body>
 </html>

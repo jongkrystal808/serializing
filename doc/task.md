@@ -1,8 +1,8 @@
 # Task Backlog
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.43
-**Last Updated:** 2026-09-09
+**Version:** 0.3.79
+**Last Updated:** 2026-09-18
 
 ---
 
@@ -10,7 +10,7 @@
 > - 每次開發前先看 `🔄 In Progress`，確認目前進行中的任務
 > - 完成一個 Task 後將狀態改為 `✅ Done`，並填入完成日期
 > - 新任務加入 `⬜ Todo`，並指定所屬模組與優先順序
-> - 此文件只記錄 **WHAT to do**，WHY & HOW 請參考 `ARCHITECTURE.md`
+> - 此文件只記錄 **WHAT to do**，WHY & HOW 請參考 `doc/architecture.md`
 
 ---
 
@@ -24,8 +24,9 @@
 - [x] 將含同步 I/O 的 async 路由改為同步 `def`，保留輕量 health async（完成：2026-09-09）
 - [x] 前端表格儲存格改用 O(1) 事件委派（完成：2026-09-09）
 - [x] 抽離自訂頁籤持久化、遷移與 CRUD 至 `previewCustomTabs.js`（完成：2026-09-09）
+- [x] 抽離主檔維護與來源維護至 `masterDataMaintenance.js`、`sourceMaintenance.js`（完成：2026-09-18）
 - [ ] 持續拆分 `app.js` 中的客戶流程控制器與匯出協調邏輯
-- [ ] 修正資料庫路徑為動態絕對路徑（config.py）
+- [x] 修正資料庫路徑為動態絕對路徑，並支援 `DB_PATH` 覆寫（完成：2026-09-09）
 - [x] 移除 500 錯誤中的內部資訊洩漏，完整堆疊改記錄於 logger（完成：2026-09-09）
 - [x] 加入 request body、實際檔案與 XLSX 解壓後總量三層上傳限制（完成：2026-09-09）
 - [x] 修正 Content-Disposition 檔名控制字元注入風險（完成：2026-09-09）
@@ -41,7 +42,7 @@
 - [x] BNG 機種／備註解析改用容錯 regex 並排除版本號（完成：2026-09-09）
 - [x] 新增 HTML attribute 專用 encoder 並明定禁止跨 script/style/URL context 使用（完成：2026-09-09）
 
-**Current Result:** 後端競態、阻塞 I/O 與安全修補完成；CSS 已降低特異性並改用主題變數／rem。前端新增 validated customer registry、DOM fail-fast、observable storage、語境化 encoder 與資料驅動預覽 shell；所有動態模板集中經 DocumentFragment boundary 更新。後端 P0/P1 regression 10/10、T27 integration 7/7 與前端 P1 regression 通過。
+**Current Result:** 後端競態、阻塞 I/O、安全修補與啟動目錄無關的 SQLite 絕對路徑已完成；CSS 已降低特異性並改用主題變數／rem。前端新增 validated customer registry、DOM fail-fast、observable storage、語境化 encoder 與資料驅動預覽 shell；所有動態模板集中經 DocumentFragment boundary 更新。主檔與來源維護已抽離，`app.js` 尚保留多客戶查詢／匯出協調。前端 7 組回歸與後端 114 tests 通過。
 
 ---
 
@@ -53,7 +54,8 @@
 **Depends on:** T27
 
 **Sub-tasks:**
-- [ ] Update architecture.md, process.md, deployment docs, API usage examples
+- [x] 同步架構、開發流程、前後端地圖與更新紀錄（2026-09-14）
+- [ ] 完整部署交接範例及新成員部署驗收
 
 **Acceptance Criteria:**
 - New team members can deploy locally from docs
@@ -63,20 +65,112 @@
 **Priority:** 🟢 Low
 
 **Sub-tasks:**
-- [ ] 後端引入 Python logging 模組
-- [ ] 定義 Customer(str, Enum) 取代 magic strings
-- [ ] ApiResponse 改為 Generic[T]
-- [ ] Schema 加入 Field(max_length, gt, le) 驗證
-- [ ] SQLite 啟用 WAL 模式
-- [ ] 重構前端重複的 render 函式為資料驅動元件
-- [ ] 加入 aria-live、ARIA roles 等無障礙屬性
-- [ ] CSS 改用 Custom Properties 統一客戶主題
-- [ ] 將測試改為 pytest 標準格式
+- [x] 後端引入 Python logging 模組（現況確認：2026-09-14）
+- [x] 定義 Customer(str, Enum) 取代 magic strings（現況確認：2026-09-14）
+- [x] ApiResponse 改為 Generic[T]（現況確認：2026-09-14）
+- [x] Schema 加入 Field(max_length, gt, le) 驗證（現況確認：2026-09-14）
+- [x] SQLite 啟用 WAL 模式（現況確認：2026-09-14）
+- [x] 重構前端重複的 render 函式為資料驅動元件（現況確認：2026-09-14）
+- [x] 加入 Toast `aria-live`、status/alert roles 與 loading `aria-busy`（完成：2026-09-09）
+- [x] CSS 改用 Custom Properties 統一客戶主題（完成：2026-09-09）
+- [x] 將測試改為 pytest 標準格式（現況確認：2026-09-14）
 - [ ] Dockerfile 加入非 root 使用者
 
 ---
 
 ## ✅ Done
+
+### ✅ T93 — 全部文件同步至 0.3.79（完成：2026-09-18）
+**Module:** Docs / Verification
+**Notes:** 15 份現行文件更新版本、日期、來源搜尋／渲染、前端模組、部署與測試狀態；7 份歷史文件保留正文並更新現況提示。`npm test` 7 組、後端 114 tests、74 個 Python 檔解析及 release check 全部通過。
+
+### ✅ T92 — 新增來源自動搜尋與超恩式渲染（完成：2026-09-17）
+**Module:** Frontend / Shipment Sources
+**Notes:** 後續新增的通用來源在更新總表後自動加入首頁工單搜尋，並統一使用摘要、分類卡片、預覽／原始資料頁籤及複製操作，不需新增客戶分支。
+
+### ✅ T91 — 勤誠／富弘年超恩式預覽（完成：2026-09-17）
+**Module:** Frontend / Preview
+**Notes:** `fzg` 與 `dcg` 首頁命中後共用超恩的摘要、分類卡片、預覽／原始資料頁籤與複製操作；勤誠客序／MAC 面板維持原流程。T92 再將相同渲染擴至所有通用來源。
+
+### ✅ T90 — 富弘年首頁搜尋與渲染（完成：2026-09-17）
+**Module:** Frontend / Excel API
+**Notes:** 內建 `dcg` 改由通用來源端點載入「富弘年出貨」分頁，加入首頁工單搜尋與完整資料預覽；通用來源匯出／歷史防護改為依實際載入來源判斷。後端聚焦測試 1 passed，前端來源搜尋回歸與語法檢查通過。
+
+### ✅ T89 — 勤誠 FZG 客序／MAC 生成（工作樹確認：2026-09-17）
+**Module:** Backend / Frontend / History
+**Notes:** 工單命中後提供客序與 MAC、原子區間保留、狀態／剩餘量、複製及確認重設。2026-09-18 後端完整測試 114 passed，已包含 FZG API。
+
+### ✅ T88 — 內建來源候選規則表單（工作樹確認：2026-09-17）
+**Module:** Shipment Sources / Migration
+**Notes:** 營邦、倫飛、富弘年、勤誠可編輯候選；未勾選走原處理器。超恩、KOYA 及輔助來源保留特殊摘要與專用流程。
+
+### ✅ T87 — 自訂來源通用搜尋與預覽（工作樹確認：2026-09-17）
+**Module:** Frontend / Excel API
+**Notes:** 自訂總表分頁自動加入首頁工單搜尋，可限定欄名；完整命中優先、多筆選取與全欄預覽。DEG 可唯一綁定；通用來源不套序號算法。
+
+### ✅ T86 — 舊客戶比較遷移與部署檢查（工作樹確認：2026-09-17）
+**Module:** Migration / Deployment
+**Notes:** 四個候選、六客戶比較、matched/fallback/blocked、唯讀 check/compare 與 SHA256 manifest。0.3.79 manifest 本機 check 無錯誤；正式資料、服務帳號權限及正式部署尚未驗收。
+
+### ✅ T85 — 來源規則第 4 階段進階匯入（工作樹確認：2026-09-17）
+**Module:** Import / Mail / Lookup
+**Notes:** 儲存格補值、coalesce、日期、Excel/SQLite 對照、多工單拆列與差額、EML/MSG/HTML 抽表與同主題局部更新。
+
+### ✅ T84 — 來源規則第 3 階段預覽與結果（工作樹確認：2026-09-17）
+**Module:** API / UI
+**Notes:** 未保存規則預覽、原始列號／映射／樣本／警告，以及背景任務逐來源 updated/retained/skipped/failed 結果。
+
+### ✅ T83 — 來源規則第 2 階段基本匯入（工作樹確認：2026-09-17）
+**Module:** Import / SQLite / UI
+**Notes:** 自訂來源建立、version 1 rules_json、I01–I07 選檔／分頁／表頭／欄位／轉換／過濾／去重與有限表單。
+
+### ✅ T82 — 資料來源規則規格化（完成：2026-09-14）
+**Module:** Docs / Architecture
+**Notes:** 分離匯入、查詢、生成責任，定義 I01–I12、Q01–Q04、G01–G04、順序、錯誤與相容界線。
+
+### ✅ T81 — 外觀主題選擇與保存（現況確認：2026-09-14）
+**Module:** Frontend / CSS
+**Notes:** light／dark／colorful，預設 dark，sn-color-theme 保存偏好，頁首選擇器與載入前讀取；尚未於本次重新執行瀏覽器視覺 QA。
+
+### ✅ T80 — 泉影 DEG 序號生成（現況確認：2026-09-14）
+**Module:** Backend / Frontend / Export / History
+**Notes:** HL、Pizza Box、Pizza Carton 三規格；獨立面板提供日期帶入、生成、複製、XLSX 下載與歷史，四張 M.2 對照圖。服務測試 12 passed、前端日期回歸通過；起號由操作員指定，無自動接續／重複偵測，API 測試尚受環境 collection errors 阻擋。
+
+### ✅ T79 — 超恩 BIOS/FW 分享連結維護（現況確認：2026-09-14）
+**Module:** Backend / Frontend / SQLite
+**Notes:** GET／PUT vecow-link、HTTP(S) 驗證與單列持久化；維護入口與超恩查詢結果提供新頁分享連結，空白移除，新增 test_vecow_link.py。
+
+### ✅ T78 — 出貨資料來源設定持久化（現況確認：2026-09-14）
+**Module:** Backend / Frontend / SQLite
+**Notes:** 九個來源支援路徑、適用工作表／檔名規則及 1～50 回溯檔案數；提供查詢、PUT 更新與重設 API，下一次合併由資料庫設定建立子程序環境。新增來源設定回歸測試。
+
+### ✅ T77 — 出貨總表背景更新與進度（現況確認：2026-09-14）
+**Module:** Backend / Frontend / Shipment Merge
+**Notes:** 首頁更新按鈕、每秒輪詢、階段進度與最後更新時間；整合六個出貨來源，暫存 XLSX 完成後原子取代，部分失敗嘗試沿用旧工作表，全部失敗保留總表。任務狀態與重複執行限制僅適用單程序；提供更新／合併測試。
+
+### ✅ T76 — 後端生命週期、資料驗證與部署修復（現況確認：2026-09-14）
+**Module:** Backend / Tests / DevOps
+**Notes:** lifespan 初始化、Depends 注入、Customer Enum、ApiResponse[T]、Field 邊界、JSON logging、WAL／BEGIN IMMEDIATE 與倫飛週別歷史 key 一致性已實作；pytest 收集與 T27 runner 已整合。Docker 網路磁碟與 DB 掛載更新；systemd 提供 StateDirectory、備份與修復腳本。Docker 非 root 與完整部署交接驗收仍由 T70／T28 追蹤。
+
+### ✅ T75 — KOYA PO／NYX LOT 改為月份維護（完成：2026-09-10）
+**Module:** KOYA / NYX / Backend API / Homepage UI
+**Notes:** PO 與 LOT 已從型號主檔拆出，改存共用 SQLite `monthly_reference` 月份對照表。載入共用 Excel「KOYA出貨」後，系統會為 KOYA、NYX 自動新增尚未存在的月份；KOYA 同時帶入該月份的 PO，NYX LOT 預設空白，兩者皆可在各自維護面板修改。既有人工資料不會被後續載入覆寫。
+
+### ✅ T74 — NYX 型號主檔系統內維護（完成：2026-09-10）
+**Module:** NYX / Backend API / Homepage UI
+**Notes:** 首頁新增可收合的 NYX 型號維護面板，支援 `Model / PN` 新增、編輯與刪除。SQLite `nyx_model` 首次建表寫入 `CZG201-XXXX`～`CZG206-XXXX` 六筆族群規則。LOT 後續已改由 T75 的月份對照維護；現階段仍未接入 NYX 出貨查詢與匯出流程。
+
+### ✅ T73 — KOYA 型號主檔改為系統內維護（完成：2026-09-10）
+**Module:** KOYA / Backend API / Homepage UI
+**Notes:** 將原 `KOYA_model.xlsx` 的 `Model / PN / full PN` 對照內容改存 SQLite `koya_model` 主檔；首頁新增可收合的 KOYA 型號維護面板，支援新增、編輯、刪除與即時狀態回饋。首次建表寫入 `CHG021-XXXX`～`CHG025-XXXX` 五筆族群規則，舊完整 Model 初始鍵會自動遷移。載入「KOYA出貨」後以 `Model` 不分大小寫匹配完整值或 `XXXX` 前綴規則，主檔值覆蓋出貨列的 `PN / full PN`；PO 後續已改由 T75 的月份對照維護。
+
+### ✅ T72 — 全域 UI/UX 操作回饋改善（完成：2026-09-09）
+**Module:** Frontend / UI / Accessibility
+**Notes:** 新增 success/error/info Toast 系統並接入搜尋、匯出與複製；按鈕加入 hover/active/loading、至少 2.5rem 觸擊高度，搜尋框加入 focus 與原生清除按鈕體驗。首頁搜尋後自動捲至預覽、匯出後捲回狀態列；新增 `Ctrl+Enter` 匯出與 `Escape` 收合設定，面板加入平滑進出場並支援 `prefers-reduced-motion`。匯出流程改回傳真實成功狀態，避免失敗誤報完成。前端回歸與瀏覽器 390px 響應式 QA 通過。
+
+### ✅ T71 — MO 命中兩筆警示與雙預覽選取（完成：2026-09-09）
+**Module:** Frontend / Search / Preview UX
+**Notes:** 倫飛與 BNG 的 MO 查詢恰好命中 2 筆時，新增彈窗警示與紅色粗體提示，並在首頁及客戶工作區顯示兩張可切換的資料預覽卡。點選後同步更新完整預覽與 `state.currentRow`；後續生成、匯出及 BNG 收據皆使用目前選取列，重新渲染後保留選取索引，切換時不重複彈窗。新增前端 regression 驗證雙預覽控制項與 ARIA 選取狀態。
 
 ### ✅ T68 — P0 安全性與正確性修復（完成：2026-09-09）
 **Module:** Backend / Security / SN Service / Frontend
@@ -391,4 +485,49 @@
 | Phase 37（BNG Copy Panel UI 改版） | 1 | 1 | 0 | 0 |
 | Phase 38（KOYA Copy Panel UI 改版） | 1 | 1 | 0 | 0 |
 | Phase 39（Code Review 2026-09-09） | 3 | 1 | 1 | 1 |
-| **Total** | **66** | **63** | **1** | **2** |
+| Phase 40（MO 命中兩筆雙預覽選取） | 1 | 1 | 0 | 0 |
+| Phase 41（全域 UI/UX 操作回饋） | 1 | 1 | 0 | 0 |
+| Phase 42（KOYA 型號主檔） | 1 | 1 | 0 | 0 |
+| Phase 43（NYX 型號主檔） | 1 | 1 | 0 | 0 |
+| Phase 44（PO／LOT 月份維護） | 1 | 1 | 0 | 0 |
+| Phase 45（後端與部署修復） | 1 | 1 | 0 | 0 |
+| Phase 46（出貨背景更新） | 1 | 1 | 0 | 0 |
+| Phase 47（來源設定持久化） | 1 | 1 | 0 | 0 |
+| Phase 48（超恩分享連結） | 1 | 1 | 0 | 0 |
+| Phase 49（泉影 DEG） | 1 | 1 | 0 | 0 |
+| Phase 50（外觀主題） | 1 | 1 | 0 | 0 |
+| Phase 51（來源規格） | 1 | 1 | 0 | 0 |
+| Phase 52（基本規則） | 1 | 1 | 0 | 0 |
+| Phase 53（預覽與結果） | 1 | 1 | 0 | 0 |
+| Phase 54（進階匯入） | 1 | 1 | 0 | 0 |
+| Phase 55（比較遷移） | 1 | 1 | 0 | 0 |
+| Phase 56（通用來源搜尋） | 1 | 1 | 0 | 0 |
+| Phase 57（內建規則表單） | 1 | 1 | 0 | 0 |
+| Phase 58（勤誠序號） | 1 | 1 | 0 | 0 |
+| **Total** | **85** | **82** | **1** | **2** |
+
+現況確認日期為文件核對日期，非推定原始實作日期。T70 仍待 Docker 非 root；T28 已有 systemd 部署與本次文件同步，完整新成員部署驗收尚未結案。
+## ✅ 超恩一覽表連結（2026-09-14）
+
+- [x] 超恩頁籤及首頁超恩查詢結果顯示 VECOW BIOSFW 測試程式一覽表連結。
+- [x] 後臺提供網址維護與移除，設定持久保存至資料庫。
+
+### 超恩 BIOS/FW 分享連結（2026-09-14 現況）
+
+`GET /api/vecow-link` 讀取、`PUT /api/vecow-link` 儲存 `{ "url": "https://…" }`；空白移除，最長 2000 字元，只接受無帳密的有效 HTTP(S) 網址。`VecowLinkService` 使用 SQLite `vecow_link` 單列（id=1），lifespan 初始化後由 router 從 app.state 取得。`js/modules/vecowLink.js` 管理維護表單、載入與連結顯示；首頁僅命中超恩時顯示，超恩工作區亦有入口，未設定時隱藏，新頁開啟使用 noopener noreferrer。此分享網址獨立於合併器 BIOS Excel 檔案路徑。維護入口以 Ctrl+Shift+D 切換顯示。
+
+## v0.3.61 現況補充（2026-09-14）
+
+本次以目前未提交工作樹核對，保留之前的修改紀錄。新增泉影 DEG 獨立生成面板、三種編碼規格、日期帶入、整批複製、Excel 下載與生成歷史；新增深色／淺色／彩色外觀選擇。後端允許七個 customer（原六客戶加 deg），前端 CUSTOMERS registry 與聚合搜尋仍為原六客戶，DEG 由獨立面板操作；NYX 仍僅提供主檔與月份維護。API 仍為 27 組 Method／Path，資料庫仍為八個表，DEG 重用 SN／export／history API 與既有歷史表。
+
+## v0.3.79 工作樹現況（2026-09-18）
+
+本版文件依目前未提交工作樹同步。現況包含可配置來源規則五階段、自訂來源建立與預覽、舊客戶比較遷移、DEG 編碼、勤誠 FZG 客序／MAC，以及富弘年 `dcg` 首頁搜尋。所有通用來源在更新總表後自動加入首頁工單／MO 搜尋，並使用超恩式摘要、分類卡片、預覽／原始資料頁籤與複製操作，不需新增客戶分支。前端已將主檔維護與來源維護分別抽至 `masterDataMaintenance.js`、`sourceMaintenance.js`。後端 Customer Enum 為 8 個值；現行 API 共 32 組 Method／Path，SQLite 共 8 張表。
+
+部署邊界：`deploy/shipment-release.json` 現為 0.3.79，本機執行 `shipment_check.py --check` 回傳 `errors: []`，清單內檔案雜湊、MIME、模組與來源設定檢查通過。此結果僅代表目前工作區自檢通過；本機未連線正式網路磁碟，亦未驗證正式伺服器部署、服務帳號權限或真實客戶資料比較。
+
+驗證狀態（2026-09-18）：`npm test` 的 7 組前端回歸全部通過（含 Playwright 來源規則瀏覽器流程）；後端完整測試為 `114 passed`；74 個 Python 檔語法解析通過；部署清單自檢無錯誤。
+
+## 0.3.79 文件同步狀態
+
+本文件已於 2026-09-18 依目前工作樹核對；細節以對應階段規格與原始碼為準。工作樹完成不代表正式機已部署。

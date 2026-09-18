@@ -1,0 +1,13 @@
+{
+  "name": "serializing-frontend-tests",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node js/tests/deg_regression.mjs && node js/tests/p1_regression.mjs && node js/tests/shipment_source_regression.mjs && node js/tests/source_migration_regression.mjs && node js/tests/source_search_regression.mjs && node js/tests/vecow_link_regression.mjs && node js/tests/source_rules_browser.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

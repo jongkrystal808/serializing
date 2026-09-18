@@ -1,8 +1,8 @@
 # Development Process Guide / 開發流程指南
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.43
-**Last Updated:** 2026-09-09
+**Version:** 0.3.79
+**Last Updated:** 2026-09-18
 
 ---
 
@@ -162,6 +162,8 @@ Step 3: 找到原因後，更新 doc/debug.md
 - [ ] **必要 DOM 在啟動時驗證** — 缺少節點時列出明確名稱，不延後成 null dereference
 - [ ] **瀏覽器儲存錯誤必須可見** — localStorage 讀寫、配額及 JSON 錯誤不可靜默忽略
 - [ ] **輸出編碼依語境選擇** — HTML text 與 attribute 使用各自 encoder，禁止沿用至 script/style/URL context
+- [ ] **非同步操作必須有可見回饋** — 搜尋、匯出與複製使用 inline status + Toast；長操作按鈕顯示 loading 並防止重複觸發
+- [ ] **動畫必須尊重使用者偏好** — transition/animation 同時提供 `prefers-reduced-motion` 降級，鍵盤操作需維持可見 focus
 
 ---
 
@@ -197,6 +199,14 @@ if (arrowPattern.test(text)) { ... }
 - `doc/task.md` - 任務清單與進度
 - `doc/debug.md` - 錯誤排查與已知問題
 - `doc/update.md` - 更新紀錄
+- `doc/front-end map.md` - 前端模組與資料流
+- `doc/back-end map.md` - 後端 API、服務與組態地圖
+- `doc/customer-rules-summary.md` - 現行客戶匯入、查詢、生成與匯出規則
+- `doc/source-rules-spec.md` - 可配置來源完整參數規格
+- `doc/source-rules-stage2.md` ～ `source-rules-stage5.md` - 基本規則、預覽、進階匯入、比較遷移與部署
+- `doc/source-search.md` - 自訂來源通用搜尋與 DEG 綁定
+- `doc/existing-source-rules-editor.md` - 內建來源候選及特殊來源限制
+- `doc/old file/` - 歷史文件，依頂部現況指引查閱
 
 ---
 
@@ -207,3 +217,47 @@ if (arrowPattern.test(text)) { ... }
 | 實作新 Task | `doc/architecture.md` + `doc/task.md` + 相關源碼 |
 | 修 Bug | `doc/architecture.md` + `doc/debug.md` + 相關源碼 |
 | 重構 / 大改 | `doc/architecture.md` + `doc/task.md` + 所有相關源碼 |
+
+## 2026-09-14 現況同步
+
+- 出貨更新：首頁「更新資料」啟動背景合併程式，每秒輪詢進度，成功後重新載入總表；最後更新時間取自檔案 mtime，以台北時間顯示。
+- 合併來源包含營邦、倫飛、超恩、KOYA、富弘年、勤誠；富弘年已接入首頁通用工單搜尋與完整資料預覽，但沒有序號／匯出流程；勤誠命中後提供客序／MAC 面板。
+- KOYA 型號保存 Model／PN／full PN；NYX 保存 Model／PN。PO／LOT 分別由月份對照維護；NYX 目前只有主檔維護，未接入出貨查詢與匯出。
+- 資料來源設定保存於 SQLite，支援九個來源的路徑及適用的工作表、檔名關鍵字、回溯檔案數；重設恢復當前環境變數或程式預設值。
+- 後端服務由 FastAPI lifespan 初始化並透過 Depends 注入；Customer Enum、ApiResponse[T]、輸入上限、JSON logging、WAL 與 SQLite 交易已實作。
+- Docker 資料庫掛載為 /app/data；網路磁碟掛載為 /mnt/netdisk。Linux systemd 提供獨立資料目錄與資料庫備份／修復腳本。
+- 本次同步依據目前工作樹（包含未提交及新增檔案），不代表已部署。主檔與來源維護已從 app.js 抽離；多客戶查詢／匯出協調與 Docker 非 root 使用者仍待處理。
+
+### 文件同步與驗證規則
+
+更新文件時同時檢查 git diff 與未追蹤新增檔案，既有修改應保留。API、資料表、設定與功能狀態須與目前原始碼一致；測試只記錄實際執行結果，未部署或未驗收項目保留待辦。現行文件統一版本與日期，歷史文件保留原始版本並加現況連結。後端完整驗證由根目錄執行 `.venv/Scripts/python -m pytest backend/tests -q`；前端執行 `npm test`；部署清單執行 `.venv/Scripts/python backend/app/tools/shipment_check.py --check --manifest deploy/shipment-release.json`。同步文件不等於正式部署或授權提交全部工作樹。
+
+### 超恩 BIOS/FW 分享連結（2026-09-14 現況）
+
+`GET /api/vecow-link` 讀取、`PUT /api/vecow-link` 儲存 `{ "url": "https://…" }`；空白移除，最長 2000 字元，只接受無帳密的有效 HTTP(S) 網址。`VecowLinkService` 使用 SQLite `vecow_link` 單列（id=1），lifespan 初始化後由 router 從 app.state 取得。`js/modules/vecowLink.js` 管理維護表單、載入與連結顯示；首頁僅命中超恩時顯示，超恩工作區亦有入口，未設定時隱藏，新頁開啟使用 noopener noreferrer。此分享網址獨立於合併器 BIOS Excel 檔案路徑。維護入口以 Ctrl+Shift+D 切換顯示。
+
+## v0.3.61 現況補充（2026-09-14）
+
+本次以目前未提交工作樹核對，保留之前的修改紀錄。新增泉影 DEG 獨立生成面板、三種編碼規格、日期帶入、整批複製、Excel 下載與生成歷史；新增深色／淺色／彩色外觀選擇。後端允許七個 customer（原六客戶加 deg），前端 CUSTOMERS registry 與聚合搜尋仍為原六客戶，DEG 由獨立面板操作；NYX 仍僅提供主檔與月份維護。API 仍為 27 組 Method／Path，資料庫仍為八個表，DEG 重用 SN／export／history API 與既有歷史表。
+
+### 本次文件與驗證要求
+
+DEG 的手動起號、歷史計數與重複序號限制須同時反映於架構、任務、代碼地圖與排查文件。部署需包含 assets/deg，六客戶 registry 不應因後端七個 customer 而記為已整合 DEG 聚合搜尋。僅記錄實際測試結果，完整測試收集失敗不得寫成驗收通過；本次僅同步文件，保留現有程式修改。
+
+## v0.3.79 工作樹現況（2026-09-18）
+
+本版文件依目前未提交工作樹同步。現況包含可配置來源規則五階段、自訂來源建立與預覽、舊客戶比較遷移、DEG 編碼、勤誠 FZG 客序／MAC，以及富弘年 `dcg` 首頁搜尋。所有通用來源在更新總表後自動加入首頁工單／MO 搜尋，並使用超恩式摘要、分類卡片、預覽／原始資料頁籤與複製操作，不需新增客戶分支。前端已將主檔維護與來源維護分別抽至 `masterDataMaintenance.js`、`sourceMaintenance.js`。後端 Customer Enum 為 8 個值；現行 API 共 32 組 Method／Path，SQLite 共 8 張表。
+
+部署邊界：`deploy/shipment-release.json` 現為 0.3.79，本機執行 `shipment_check.py --check` 回傳 `errors: []`，清單內檔案雜湊、MIME、模組與來源設定檢查通過。此結果僅代表目前工作區自檢通過；本機未連線正式網路磁碟，亦未驗證正式伺服器部署、服務帳號權限或真實客戶資料比較。
+
+驗證狀態（2026-09-18）：`npm test` 的 7 組前端回歸全部通過（含 Playwright 來源規則瀏覽器流程）；後端完整測試為 `114 passed`；74 個 Python 檔語法解析通過；部署清單自檢無錯誤。
+
+### v0.3.79 文件與發布流程
+
+來源規則變更須同步規格文件、架構、前後端地圖、任務、更新與 debug，並區分「工作樹已實作」「測試資料通過」「正式資料比較」「已部署」四種狀態。修改 release 清單內任一檔後要重建同批 SHA256 清單；以 systemd 服務帳號執行 check，必要時再 compare。退出碼 2 或 hash／MIME 錯誤不得視為成功。
+
+功能驗收順序：未保存設定預覽 → 保存／重載 → 更新資料 → 查看逐來源結果 → load-source／首頁搜尋 → 對應生成。舊客戶候選只逐一開啟，差異即 fallback；超恩、KOYA 保留專用流程。更新文件不得把本機生成 fixture 等同正式資料，也不得因後端 Enum 有 8 個值就宣稱所有客戶共用同一搜尋或生成流程。
+
+## 0.3.79 文件同步狀態
+
+本文件已於 2026-09-18 依目前工作樹核對；細節以對應階段規格與原始碼為準。工作樹完成不代表正式機已部署。

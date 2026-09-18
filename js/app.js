@@ -4,7 +4,7 @@ import {
   getActiveCustomerProfile,
   setActiveCustomerKey
 } from "./config.js";
-import { state, createUiRefs } from "./state.js";
+import { state, createUiRefs } from "./state.js?v=0.3.70";
 import {
   getDatecode,
   getCurrentWeekNumber2Digits,
@@ -17,6 +17,7 @@ import {
 import {
   parseExcelByApi,
   loadDefaultExcelByApi,
+  loadSourceExcelByApi,
   generateSnByApi,
   getHistoryByApi,
   upsertHistoryByApi,
@@ -24,8 +25,9 @@ import {
   exportWorkbookByApi,
   getPrintNoticesByApi,
   upsertPrintNoticeByApi,
-  deletePrintNoticeByApi
-} from "./modules/api.js";
+  deletePrintNoticeByApi,
+  getShipmentSourcesByApi
+} from "./modules/api.js?v=0.3.70";
 import {
   findWorkOrderRows,
   findRowsByColumnCode,
@@ -34,7 +36,13 @@ import {
   resolveQtyByPairedSlash
 } from "./modules/workOrder.js";
 import { escapeHtml, normalizeRangeText, normalizeText } from "./modules/utils.js";
-import { createHomeController } from "./modules/homeController.js";
+import { createHomeController } from "./modules/homeController.js?v=0.3.76";
+import { findDegWorkOrderRows, setDegGeneratorVisible } from "./modules/deg.js?v=0.3.68";
+import { renderGenericSourceSearchSuccess, renderSheetContentPane } from "./modules/uiPreviewRenderers.js?v=0.3.78";
+import { findSourceRows } from "./modules/sourceSearch.js?v=0.3.76";
+import { createVecowLinkController } from "./modules/vecowLink.js?v=0.3.60";
+import { createMasterDataMaintenance } from "./modules/masterDataMaintenance.js";
+import { createSourceMaintenance } from "./modules/sourceMaintenance.js";
 import { resolveCustomerColumnKey, getRowValueByCustomerColumnCode } from "./modules/customerColumns.js";
 import {
   buildClgPlannedSerialPreview,
@@ -47,8 +55,10 @@ import {
 } from "./modules/bngReceipt.js";
 import { createPreviewCustomTabsController } from "./modules/previewCustomTabs.js";
 import { getCustomerRegistry } from "./modules/customers.js";
-import { setStorageErrorHandler } from "./modules/storage.js";
+import { readStorageItem, setStorageErrorHandler, writeStorageItem } from "./modules/storage.js";
 import { cloneChildrenInto, replaceChildrenFromTrustedTemplate } from "./modules/dom.js";
+import { showToast } from "./modules/toast.js";
+import { initFzgSerialGenerator } from "./modules/fzgSerial.js?v=0.3.79";
 import {
   updateStatus,
   renderLoadResult,
@@ -92,6 +102,7 @@ const SHARED_PARSE_FALLBACKS = {
   clg: { sheetName: "板階序號編碼", parseRules: ["none"] }
 };
 const PREVIEW_CUSTOM_TABS_STORAGE_KEY = "sn_preview_custom_tabs";
+const THEME_STORAGE_KEY = "sn-color-theme";
 const SHARED_CUSTOMER_KEYS = ["yingbang", "lunfei", "bng", "chg"];
 const PRINTED_NOTICE_CUSTOMER_LABELS = {
   yingbang: "營邦",
@@ -101,6 +112,13 @@ const PRINTED_NOTICE_CUSTOMER_LABELS = {
 };
 const PRINT_NOTICE_BOARD_WINDOW_DAYS = 7;
 const PRINT_HISTORY_WINDOW_WEEKS = 8;
+
+function applyTheme(theme) {
+  const nextTheme = ["light", "dark", "colorful"].includes(theme) ? theme : "dark";
+  document.documentElement.dataset.theme = nextTheme;
+  ui.themeSelect.value = nextTheme;
+}
+
 const USAGE_HELP_MESSAGES = {
   "customer-tabs": [
     "客戶頁籤使用方式：",
@@ -133,6 +151,7 @@ const homeRuntime = {
   pendingModelCustomer: "",
   pendingModelRows: []
 };
+const setFzgSearchResult = initFzgSerialGenerator();
 const previewCustomTabsController = createPreviewCustomTabsController({
   storageKey: PREVIEW_CUSTOM_TABS_STORAGE_KEY,
   getCustomers: () => customers,
@@ -667,6 +686,38 @@ function triggerBlobDownload(blob, filename) {
   window.URL.revokeObjectURL(url);
 }
 
+
+function setButtonLoading(button, isLoading) {
+  if (!button) {
+    return;
+  }
+  button.classList.toggle("btn-loading", Boolean(isLoading));
+  if (isLoading) {
+    button.setAttribute("aria-busy", "true");
+  } else {
+    button.removeAttribute("aria-busy");
+  }
+}
+
+function scrollToElement(element) {
+  if (!element) {
+    return;
+  }
+  const behavior = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ? "auto" : "smooth";
+  window.requestAnimationFrame(() => {
+    element.scrollIntoView({ behavior, block: "nearest" });
+  });
+}
+
+async function runWithButtonLoading(button, task) {
+  setButtonLoading(button, true);
+  try {
+    return await task();
+  } finally {
+    setButtonLoading(button, false);
+  }
+}
+
 function buildYingbangPreviewSN(purchaseOrder, historyKey, entries) {
   const po = String(purchaseOrder ?? "").trim();
   if (!po) {
@@ -807,12 +858,13 @@ function updateHomeStatus(message, isError = false, isLoading = false, isSuccess
 }
 
 // 【用途】控制首頁載入狀態與查詢按鈕可用性
-function setHomeLoading(isLoading, message = "") {
+function setHomeLoading(isLoading, message = "", action = "search") {
   if (ui.homeLoadingIndicator) {
     ui.homeLoadingIndicator.classList.toggle("active", isLoading);
   }
   if (ui.homeQueryBtn) {
     ui.homeQueryBtn.disabled = isLoading;
+    setButtonLoading(ui.homeQueryBtn, isLoading && action === "search");
   }
   if (ui.homeHistoryBtn) {
     ui.homeHistoryBtn.disabled = isLoading;
@@ -824,6 +876,10 @@ function setHomeLoading(isLoading, message = "") {
     if (isLoading) {
       ui.homeBngPrintBtn.disabled = true;
     }
+  }
+  if (ui.homeExportBtn) {
+    setButtonLoading(ui.homeExportBtn, isLoading && action === "export");
+    ui.homeExportBtn.disabled = isLoading || homeRuntime.customer === "deg" || state.customSourceData.some((source) => source.key === homeRuntime.customer) || !(homeRuntime.customer && state.currentRow);
   }
   if (ui.homeSearchInput) {
     ui.homeSearchInput.disabled = isLoading;
@@ -932,12 +988,20 @@ function resetDataForCustomerSwitch() {
 
 function updateTabUi() {
   const active = getActiveCustomerKey();
-  ui.yingbangTab.classList.toggle("active", active === "yingbang");
-  ui.lunfeiTab.classList.toggle("active", active === "lunfei");
-  ui.bngTab.classList.toggle("active", active === "bng");
-  ui.chgTab.classList.toggle("active", active === "chg");
-  ui.hmgTab.classList.toggle("active", active === "hmg");
-  ui.clgTab.classList.toggle("active", active === "clg");
+  const customerTabs = [
+    ["yingbang", ui.yingbangTab],
+    ["lunfei", ui.lunfeiTab],
+    ["bng", ui.bngTab],
+    ["chg", ui.chgTab],
+    ["hmg", ui.hmgTab],
+    ["clg", ui.clgTab]
+  ];
+  customerTabs.forEach(([key, tab]) => {
+    const isSelected = active === key;
+    tab.classList.toggle("active", isSelected);
+    tab.setAttribute("aria-selected", isSelected ? "true" : "false");
+    tab.tabIndex = isSelected ? 0 : -1;
+  });
   ui.yingbangWorkspace.hidden = active !== "yingbang";
   ui.lunfeiWorkspace.hidden = active !== "lunfei";
   ui.bngWorkspace.hidden = active !== "bng";
@@ -1024,6 +1088,7 @@ function cleanupBngReceiptPrintView() {
 }
 
 function onCopyError() {
+  showToast("複製失敗：瀏覽器不允許剪貼簿存取。", "error");
   if (getActiveCustomerKey() === "lunfei") {
     updateLunfeiStatus("複製失敗：瀏覽器不允許剪貼簿存取。", true);
     return;
@@ -1375,6 +1440,8 @@ const HOME_CUSTOMER_THEME_CLASSES = Object.values(HOME_CUSTOMER_THEME_CLASS_MAP)
 
 // 【用途】首頁命中結果：套用/清除客戶主題色（狀態列 + 預覽窗格）
 function setHomeCustomerTheme(customerKey) {
+  setDegGeneratorVisible(customerKey === "deg" && Boolean(state.currentRow));
+  vecowLinkController.setHomeCustomer(customerKey);
   const themeClass = HOME_CUSTOMER_THEME_CLASS_MAP[customerKey] || "";
   const targets = [ui.homeShell, ui.homePreviewPanel];
   targets.forEach((element) => {
@@ -1390,6 +1457,17 @@ function setHomeCustomerTheme(customerKey) {
 
 // 【用途】首頁查詢分流：把關鍵字送到指定客戶既有查詢流程
 async function runHomeSearchByCustomer(customerKey, query) {
+  const source = state.customSourceData.find((item) => item.key === customerKey);
+  if (source) {
+    state.currentRow = findSourceRows(source, query)[0] || null;
+    state.currentQuery = query;
+    return;
+  }
+  if (customerKey === "deg") {
+    state.currentRow = findDegWorkOrderRows(state.degRowData, query, false, state.degWorkOrderColumn)[0] || null;
+    state.currentQuery = query;
+    return;
+  }
   if (customerKey === "yingbang") {
     switchCustomerTab("yingbang");
     ui.searchInput.value = query;
@@ -1458,6 +1536,21 @@ function syncHomePreviewPanel(customerKey) {
   if (!ui.homePreviewPanel) {
     return;
   }
+  const source = state.customSourceData.find((item) => item.key === customerKey);
+  if (source) {
+    const rows = findSourceRows(source, homeRuntime.query);
+    renderGenericSourceSearchSuccess(ui.homePreviewPanel, { source, query: homeRuntime.query, rows });
+    bindPreviewTabsIn(ui.homePreviewPanel);
+    bindSheetCopyCellsIn(ui.homePreviewPanel, onCopyError);
+    bindCopyButtonsIn(ui.homePreviewPanel, onCopyError);
+    return;
+  }
+  if (customerKey === "deg") {
+    const rows = findDegWorkOrderRows(state.degRowData, homeRuntime.query, false, state.degWorkOrderColumn);
+    replaceChildrenFromTrustedTemplate(ui.homePreviewPanel, `<h2>泉影工單</h2><p>查詢工單：${escapeHtml(homeRuntime.query)}（命中 ${rows.length} 筆）</p>${renderSheetContentPane(rows)}<p>請使用下方泉影 DEG 編碼設定生成序號。</p>`);
+    bindSheetCopyCellsIn(ui.homePreviewPanel, onCopyError);
+    return;
+  }
   const sourcePanel = getPreviewPanelByCustomer(customerKey);
   if (sourcePanel) {
     cloneChildrenInto(ui.homePreviewPanel, sourcePanel);
@@ -1479,8 +1572,24 @@ function syncHomePreviewPanel(customerKey) {
   });
 }
 
+function renderHomeCustomerResults(sources, query) {
+  const content = sources.map((source) => `
+    <section>
+      <h2>${escapeHtml(source.label)}</h2>
+      <p>客戶關鍵字「${escapeHtml(query)}」；共 ${source.rows.length} 筆</p>
+      ${renderSheetContentPane(source.rows)}
+    </section>
+  `).join("");
+  replaceChildrenFromTrustedTemplate(ui.homePreviewPanel, content);
+  bindSheetCopyCellsIn(ui.homePreviewPanel, onCopyError);
+}
+
 async function onHomeResetHistoryByCustomer(customerKey, historyKey) {
   const key = String(customerKey ?? "").trim();
+  if (key === "deg") {
+    await resetHistoryByApi({ customer: "deg", key: historyKey });
+    return;
+  }
   if (key === "yingbang") {
     await onResetSerialHistoryKey(historyKey);
     return;
@@ -1531,7 +1640,11 @@ const homeController = createHomeController({
   getHmgModelValue,
   getClgModelValue,
   getRowValueByCustomerColumnCode,
-  updateHomeStatus
+  updateHomeStatus,
+  showToast,
+  scrollToElement,
+  renderHomeCustomerResults,
+  setFzgSearchResult
 });
 
 const {
@@ -1576,8 +1689,10 @@ async function onClgCopySerialTextClick(event) {
     const plainText = serialList.join("\n");
     await copyTextToClipboard(plainText);
     updateHomeStatus(`已複製整串序號（共 ${serialList.length} 筆）。`, false, false, true);
+    showToast(`已複製整串序號（共 ${serialList.length} 筆）。`, "success");
   } catch (error) {
     updateHomeStatus(`複製失敗：${getSafeErrorMessage(error)}`, true);
+    showToast(`複製失敗：${getSafeErrorMessage(error)}`, "error");
   }
 }
 
@@ -2475,6 +2590,10 @@ async function processSharedExcelFile(file) {
   if (!file) {
     return;
   }
+  state.degRowData = [];
+  state.degWorkOrderColumn = null;
+  state.customSourceData = [];
+  setDegGeneratorVisible(false);
   setAllCustomerLoading(true, `讀取中：${file.name}（同步解析共用客戶）...`);
   try {
     const parseTargets = getSharedParseTargets();
@@ -2493,6 +2612,17 @@ async function processSharedExcelFile(file) {
       })
     );
     const rowsByCustomer = { yingbang: [], lunfei: [], bng: [], chg: [] };
+    await loadCustomSourceData(file);
+    // 舊總表可能尚無 DEG 分頁；不得沿用前一次泉影資料。
+    try {
+      const entries = (await getShipmentSourcesByApi()).entries || [];
+      const binding = entries.find((entry) => entry.search_customer === "deg");
+      const parsed = await parseExcelByApi({ customer: "deg", sheetName: binding?.label || "DEG", parseRules: ["trim"], file });
+      state.degRowData = Array.isArray(parsed.rows) ? parsed.rows : [];
+      state.degWorkOrderColumn = binding?.work_order_column || null;
+    } catch (error) {
+      showToast(`泉影 DEG 未載入：${getSafeErrorMessage(error)}`, "info");
+    }
     parseResults.forEach((item) => {
       rowsByCustomer[item.customer] = item.rows;
     });
@@ -2500,7 +2630,12 @@ async function processSharedExcelFile(file) {
     state.yingbangRowData = rowsByCustomer.yingbang;
     state.lunfeiRowData = rowsByCustomer.lunfei;
     state.bngRowData = rowsByCustomer.bng;
-    state.chgRowData = rowsByCustomer.chg;
+    setChgShipmentRows(rowsByCustomer.chg);
+    try {
+      await ensureMonthlyReferencesFromKoyaRows();
+    } catch (error) {
+      showToast(`月份自動帶入失敗：${getSafeErrorMessage(error)}`, "error");
+    }
     state.currentRow = null;
     state.currentQuery = "";
     state.generatedSNList = [];
@@ -2552,7 +2687,7 @@ async function processSharedExcelFile(file) {
     state.yingbangRowData = [];
     state.lunfeiRowData = [];
     state.bngRowData = [];
-    state.chgRowData = [];
+    setChgShipmentRows([]);
     state.currentRow = null;
     state.currentQuery = "";
     state.generatedSNList = [];
@@ -2792,11 +2927,13 @@ async function onExportClick() {
   if (getActiveCustomerKey() === "lunfei") {
     if (!state.currentRow) {
       updateLunfeiStatus("請先查詢 MO 後再生成。", true);
-      return;
+      showToast("請先查詢 MO 後再生成。", "error");
+      return false;
     }
     if (ui.lunfeiExportBtn.disabled) {
       updateLunfeiStatus("此型號不需要序號，已禁止生成。", true);
-      return;
+      showToast("此型號不需要序號，已禁止生成。", "error");
+      return false;
     }
     try {
       const mo = state.currentQuery || String(state.currentRow[resolveColumnKey(state.currentRow, "MO") || CONFIG.COLUMNS.MO] ?? "").trim();
@@ -2837,17 +2974,21 @@ async function onExportClick() {
       });
       triggerBlobDownload(exported.blob, exported.filename);
       updateLunfeiStatus(`已完成匯出：${exported.filename}（SN ${snList.length} 筆）`);
+      showToast(`匯出完成：${exported.filename}`, "success");
       await performLunfeiSearch();
+      return true;
     } catch (error) {
       updateLunfeiStatus(`生成失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
+      return false;
     }
-    return;
   }
 
   if (getActiveCustomerKey() === "bng") {
     if (!state.currentRow) {
       updateBngStatus("請先查詢 MO 後再生成。", true);
-      return;
+      showToast("請先查詢 MO 後再生成。", "error");
+      return false;
     }
     try {
       const workOrder = String(
@@ -2900,17 +3041,21 @@ async function onExportClick() {
       updateBngStatus(
         `已完成匯出：${exported.filename}（SN ${bundle.generated.snList.length} 筆，MAC ${bundle.generated.macList.length} 筆）`
       );
+      showToast(`匯出完成：${exported.filename}`, "success");
       await performBngSearch();
+      return true;
     } catch (error) {
       updateBngStatus(`生成失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
+      return false;
     }
-    return;
   }
 
   if (getActiveCustomerKey() === "chg") {
     if (!state.currentRow) {
       updateChgStatus("請先查詢工單後再生成。", true);
-      return;
+      showToast("請先查詢工單後再生成。", "error");
+      return false;
     }
     try {
       const workOrder = String(
@@ -2950,17 +3095,21 @@ async function onExportClick() {
       });
       triggerBlobDownload(exported.blob, exported.filename);
       updateChgStatus(`已完成匯出：${exported.filename}（標籤 ${bundle.generated.labelQty} 筆）`);
+      showToast(`匯出完成：${exported.filename}`, "success");
       await performChgSearch();
+      return true;
     } catch (error) {
       updateChgStatus(`生成失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
+      return false;
     }
-    return;
   }
 
   if (getActiveCustomerKey() === "hmg") {
     if (!state.currentRow) {
       updateHmgStatus("請先查詢 Model 後再匯出。", true);
-      return;
+      showToast("請先查詢 Model 後再匯出。", "error");
+      return false;
     }
     try {
       const model = getHmgModelValue(state.currentRow);
@@ -2996,11 +3145,14 @@ async function onExportClick() {
       });
       triggerBlobDownload(exported.blob, exported.filename);
       updateHmgStatus(`已完成匯出：${exported.filename}`);
+      showToast(`匯出完成：${exported.filename}`, "success");
       await performHmgSearch();
+      return true;
     } catch (error) {
       updateHmgStatus(`匯出失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
+      return false;
     }
-    return;
   }
 
   if (getActiveCustomerKey() === "clg") {
@@ -3019,7 +3171,8 @@ async function onExportClick() {
       const fileName = getClgExportFileName();
       if (!fileName) {
         updateClgStatus("已取消匯出。", true);
-        return;
+        showToast("已取消匯出。", "info");
+        return false;
       }
       const snRows = serials.map((sn) => ({ SN: sn }));
       state.generatedSNList = snRows;
@@ -3042,15 +3195,19 @@ async function onExportClick() {
         refreshClgPlannedSerialPreview();
         updateClgStatus(`已完成匯出：${exported.filename}（SN ${snRows.length} 筆，手動模式）`);
       }
+      showToast(`匯出完成：${exported.filename}`, "success");
+      return true;
     } catch (error) {
       updateClgStatus(`生成失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
+      return false;
     }
-    return;
   }
 
   if (!state.currentRow) {
     updateStatus(ui, "請先查詢工單後再匯出。", true);
-    return;
+    showToast("請先查詢工單後再匯出。", "error");
+    return false;
   }
 
   try {
@@ -3083,6 +3240,7 @@ async function onExportClick() {
     });
     triggerBlobDownload(exported.blob, exported.filename);
     updateStatus(ui, `已完成匯出：${exported.filename}（共 ${snList.length} 筆）`);
+    showToast(`匯出完成：${exported.filename}`, "success");
 
     const query = ui.searchInput.value.trim();
     if (query) {
@@ -3092,12 +3250,62 @@ async function onExportClick() {
         await refreshSearchPreview(query, matchedRows.length);
       }
     }
+    return true;
   } catch (error) {
     updateStatus(ui, `匯出失敗：${getSafeErrorMessage(error)}`, true);
+    showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
+    return false;
   }
 }
 
+// 【用途】將自定義產生的全部序號下載為 MES 工作表。
+function onClgSerialDownloadClick() {
+  try {
+    const serialList = buildClgSerialList(getClgInputValues(ui));
+    const format = ui.clgExportFormatSelect.value === "xls" ? "xls" : "xlsx";
+    const columnName = ui.clgExportColumnSelect.value === "LabelName" ? "LabelName" : "SN";
+    if (format === "xls" && serialList.length > 65535) {
+      throw new Error("XLS 最多可包含 65,535 筆序號，請改選 XLSX。");
+    }
+    if (!globalThis.XLSX?.utils) {
+      throw new Error("Excel 匯出元件尚未載入，請重新整理頁面後再試。");
+    }
+
+    const now = new Date();
+    const datePrefix = `${String(now.getFullYear()).slice(-2)}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}-`;
+    const customName = window.prompt("請輸入檔案名稱", `${datePrefix}Cubepilot-MES`);
+    if (customName === null) {
+      updateHomeStatus("已取消下載。", false);
+      return;
+    }
+    const sanitizedName = String(customName)
+      .trim()
+      .replace(/\.(?:xls|xlsx)$/i, "")
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, "_")
+      .replace(/[. ]+$/g, "") || "Cubepilot-MES";
+    const filename = `${sanitizedName.startsWith(datePrefix) ? "" : datePrefix}${sanitizedName}.${format}`;
+
+    const workbook = globalThis.XLSX.utils.book_new();
+    const worksheet = globalThis.XLSX.utils.aoa_to_sheet([
+      [columnName],
+      ...serialList.map((serial) => [serial])
+    ]);
+    globalThis.XLSX.utils.book_append_sheet(workbook, worksheet, "MES");
+    globalThis.XLSX.writeFile(workbook, filename, { bookType: format, compression: format === "xlsx" });
+    updateHomeStatus(`已下載 ${filename}（共 ${serialList.length} 筆序號，欄位：${columnName}）。`, false, false, true);
+    showToast(`已下載全部序號：${filename}`, "success");
+  } catch (error) {
+    updateHomeStatus(`下載失敗：${getSafeErrorMessage(error)}`, true);
+    showToast(`下載失敗：${getSafeErrorMessage(error)}`, "error");
+  }
+}
+
+
 function initEvents() {
+  ui.themeSelect.addEventListener("change", () => {
+    applyTheme(ui.themeSelect.value);
+    writeStorageItem(THEME_STORAGE_KEY, ui.themeSelect.value);
+  });
   if (ui.homeQueryBtn) {
     ui.homeQueryBtn.addEventListener("click", performHomeSearch);
   }
@@ -3115,6 +3323,15 @@ function initEvents() {
   }
   if (ui.homeSearchInput) {
     ui.homeSearchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && event.ctrlKey) {
+        event.preventDefault();
+        if (ui.homeExportBtn?.disabled) {
+          showToast("請先完成查詢，再使用 Ctrl+Enter 匯出。", "info");
+          return;
+        }
+        onHomeExportClick();
+        return;
+      }
       if (event.key === "Enter") {
         event.preventDefault();
         performHomeSearch();
@@ -3131,6 +3348,9 @@ function initEvents() {
   if (ui.clgSettingsPlannedPreviewRoot) {
     ui.clgSettingsPlannedPreviewRoot.addEventListener("click", onClgCopySerialTextClick);
   }
+  sourceMaintenance.bindEvents();
+  ui.clgSerialDownloadBtn.addEventListener("click", onClgSerialDownloadClick);
+  masterDataMaintenance.bindEvents();
   if (ui.homeSearchTypeSelect) {
     ui.homeSearchTypeSelect.addEventListener("change", onHomeSearchTypeChange);
   }
@@ -3182,47 +3402,47 @@ function initEvents() {
     openClgSerialHistoryPanel();
   });
   ui.historyBtn.addEventListener("click", openSerialHistoryPanel);
-  ui.queryBtn.addEventListener("click", performSearch);
-  ui.lunfeiQueryBtn.addEventListener("click", performLunfeiSearch);
-  ui.bngQueryBtn.addEventListener("click", performBngSearch);
-  ui.chgQueryBtn.addEventListener("click", performChgSearch);
-  ui.hmgQueryBtn.addEventListener("click", performHmgSearch);
-  ui.clgQueryBtn.addEventListener("click", performClgSearch);
-  ui.exportBtn.addEventListener("click", onExportClick);
-  ui.lunfeiExportBtn.addEventListener("click", onExportClick);
-  ui.bngExportBtn.addEventListener("click", onExportClick);
-  ui.chgExportBtn.addEventListener("click", onExportClick);
-  ui.hmgExportBtn.addEventListener("click", onExportClick);
-  ui.clgExportBtn.addEventListener("click", onExportClick);
+  ui.queryBtn.addEventListener("click", () => runWithButtonLoading(ui.queryBtn, performSearch));
+  ui.lunfeiQueryBtn.addEventListener("click", () => runWithButtonLoading(ui.lunfeiQueryBtn, performLunfeiSearch));
+  ui.bngQueryBtn.addEventListener("click", () => runWithButtonLoading(ui.bngQueryBtn, performBngSearch));
+  ui.chgQueryBtn.addEventListener("click", () => runWithButtonLoading(ui.chgQueryBtn, performChgSearch));
+  ui.hmgQueryBtn.addEventListener("click", () => runWithButtonLoading(ui.hmgQueryBtn, performHmgSearch));
+  ui.clgQueryBtn.addEventListener("click", () => runWithButtonLoading(ui.clgQueryBtn, performClgSearch));
+  ui.exportBtn.addEventListener("click", () => runWithButtonLoading(ui.exportBtn, onExportClick));
+  ui.lunfeiExportBtn.addEventListener("click", () => runWithButtonLoading(ui.lunfeiExportBtn, onExportClick));
+  ui.bngExportBtn.addEventListener("click", () => runWithButtonLoading(ui.bngExportBtn, onExportClick));
+  ui.chgExportBtn.addEventListener("click", () => runWithButtonLoading(ui.chgExportBtn, onExportClick));
+  ui.hmgExportBtn.addEventListener("click", () => runWithButtonLoading(ui.hmgExportBtn, onExportClick));
+  ui.clgExportBtn.addEventListener("click", () => runWithButtonLoading(ui.clgExportBtn, onExportClick));
   ui.bngPrintBtn.addEventListener("click", onBngPrintReceiptClick);
   ui.searchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      performSearch();
+      runWithButtonLoading(ui.queryBtn, performSearch);
     }
   });
   ui.lunfeiSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      performLunfeiSearch();
+      runWithButtonLoading(ui.lunfeiQueryBtn, performLunfeiSearch);
     }
   });
   ui.bngSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      performBngSearch();
+      runWithButtonLoading(ui.bngQueryBtn, performBngSearch);
     }
   });
   ui.chgSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      performChgSearch();
+      runWithButtonLoading(ui.chgQueryBtn, performChgSearch);
     }
   });
   ui.hmgSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      performHmgSearch();
+      runWithButtonLoading(ui.hmgQueryBtn, performHmgSearch);
     }
   });
   ui.hmgSearchInput.addEventListener("input", onHmgSearchInputChange);
@@ -3232,7 +3452,7 @@ function initEvents() {
   ui.clgSearchInput.addEventListener("keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      performClgSearch();
+      runWithButtonLoading(ui.clgQueryBtn, performClgSearch);
     }
   });
   ui.clgSearchInput.addEventListener("input", onClgSearchInputChange);
@@ -3254,16 +3474,77 @@ function initEvents() {
   ui.hmgFileInput.addEventListener("change", onHmgFileSelected);
   ui.clgFileInput.addEventListener("change", onClgFileSelected);
   document.addEventListener("click", onUsageHelpClick);
+  document.addEventListener("keydown", (event) => {
+    if (event.ctrlKey && event.shiftKey && String(event.key).toLowerCase() === "d") {
+      event.preventDefault();
+      setMaintenanceEntriesVisibility(ui.shipmentSourceToggleBtn.hidden, true);
+      return;
+    }
+    if (event.key === "Escape" && ui.clgSerialSettingsCard && !ui.clgSerialSettingsCard.hidden) {
+      setClgSettingsVisibility(false);
+      ui.clgSettingsToggleBtn?.focus();
+    }
+    if (event.key === "Escape" && !ui.koyaModelMaintenanceCard.hidden) {
+      setKoyaModelMaintenanceVisibility(false);
+      ui.koyaModelToggleBtn.focus();
+    }
+    if (event.key === "Escape" && !ui.nyxModelMaintenanceCard.hidden) {
+      setNyxModelMaintenanceVisibility(false);
+      ui.nyxModelToggleBtn.focus();
+    }
+    if (event.key === "Escape" && !ui.shipmentSourceMaintenanceCard.hidden) {
+      setShipmentSourceMaintenanceVisibility(false);
+      ui.shipmentSourceToggleBtn.focus();
+    }
+  });
 }
 
 // 【用途】頁面載入時依後端設定的固定路徑自動載入 Excel，不需使用者手動上傳
+async function loadCustomSourceData(file = null) {
+  state.customSourceData = [];
+  try {
+    const entries = (await getShipmentSourcesByApi()).entries || [];
+    state.shipmentSourceEntries = entries;
+    const sources = entries.filter((entry) => (entry.is_custom || entry.key === "dcg") && entry.search_customer !== "deg");
+    // ponytail: 每來源各讀一次總表；來源多且載入慢時改為批次讀取。
+    const loaded = await Promise.allSettled(sources.map(async (entry) => {
+      const result = file ? await parseExcelByApi({ customer: "deg", sheetName: entry.label, parseRules: ["trim"], file }) : await loadSourceExcelByApi(entry.key);
+      if (entry.work_order_column && result.rows?.length && !Object.keys(result.rows[0]).some((key) => normalizeText(key) === normalizeText(entry.work_order_column))) throw new Error(`搜尋欄位不存在：${entry.work_order_column}`);
+      return result;
+    }));
+    loaded.forEach((outcome, index) => {
+      const entry = sources[index];
+      if (outcome.status === "fulfilled") {
+        state.customSourceData.push({ key: entry.key, label: entry.label, column: entry.work_order_column || outcome.value.resolved_columns?.WORK_ORDER || null, rows: outcome.value.rows || [] });
+      } else {
+        showToast(`${entry.label}搜尋資料未載入：${getSafeErrorMessage(outcome.reason)}`, "error");
+      }
+    });
+  } catch (error) {
+    showToast(`自訂來源搜尋載入失敗：${getSafeErrorMessage(error)}`, "error");
+  }
+  try {
+    const result = file
+      ? await parseExcelByApi({ customer: "fzg", sheetName: "勤誠出貨", parseRules: ["trim"], file })
+      : await loadDefaultExcelByApi("fzg");
+    const headers = Object.keys(result.rows?.[0] || {});
+    const column = headers.find((name) => ["DDC MO", "工單", "工單號", "工單號碼", "MO"].includes(String(name).trim())) || null;
+    if (!column && result.rows?.length) throw new Error("勤誠出貨工作表缺少工單欄位");
+    state.customSourceData.push({ key: "fzg", label: "勤誠", column, rows: result.rows || [] });
+  } catch (error) {
+    showToast(`勤誠工單資料未載入：${getSafeErrorMessage(error)}`, "error");
+  }
+}
+
 async function autoRestoreExcelData() {
-  const customers = ["yingbang", "lunfei", "bng", "chg", "hmg", "clg"];
+  await loadCustomSourceData();
+  const customers = ["yingbang", "lunfei", "bng", "chg", "hmg", "clg", "deg"];
   const results = await Promise.allSettled(
     customers.map((key) => loadDefaultExcelByApi(key))
   );
 
   const statusMap = {
+    deg:      { state: "degRowData" },
     yingbang: { state: "yingbangRowData", setSearch: true },
     lunfei:   { state: "lunfeiRowData",   input: "lunfeiSearchInput", btn: "lunfeiQueryBtn" },
     bng:      { state: "bngRowData",      input: "bngSearchInput",    btn: "bngQueryBtn" },
@@ -3274,20 +3555,35 @@ async function autoRestoreExcelData() {
 
   const restored = [];
   const failed = [];
+  state.degRowData = [];
+  state.degWorkOrderColumn = null;
+  setDegGeneratorVisible(false);
 
   customers.forEach((key, index) => {
     const outcome = results[index];
     const cfg = statusMap[key];
     if (outcome.status === "fulfilled") {
+      if (key === "deg") state.degWorkOrderColumn = outcome.value?.resolved_columns?.WORK_ORDER || null;
       const rows = outcome.value?.rows;
       if (Array.isArray(rows) && rows.length > 0) {
-        state[cfg.state] = rows;
+        if (key === "chg") {
+          setChgShipmentRows(rows);
+        } else {
+          state[cfg.state] = rows;
+        }
         restored.push(`${key} ${rows.length} 筆`);
       }
     } else {
       failed.push(key);
+      if (key === "deg") showToast(`泉影搜尋資料未載入：${getSafeErrorMessage(outcome.reason)}`, "error");
     }
   });
+
+  try {
+    await ensureMonthlyReferencesFromKoyaRows();
+  } catch (error) {
+    showToast(`月份自動帶入失敗：${getSafeErrorMessage(error)}`, "error");
+  }
 
   // 更新 UI 啟用狀態
   setSearchEnabled(state.yingbangRowData.length > 0);
@@ -3304,8 +3600,46 @@ async function autoRestoreExcelData() {
   }
 }
 
+const masterDataMaintenance = createMasterDataMaintenance({
+  ui,
+  state,
+  customers,
+  homeRuntime,
+  setButtonLoading,
+  scrollToElement,
+  getSafeErrorMessage,
+  setHomeExportEnabled,
+  updateHomeStatus
+});
+const {
+  ensureMonthlyReferencesFromKoyaRows,
+  loadKoyaModelEntries,
+  loadMonthlyReferenceEntries,
+  loadNyxModelEntries,
+  setChgShipmentRows,
+  setKoyaModelMaintenanceVisibility,
+  setNyxModelMaintenanceVisibility
+} = masterDataMaintenance;
+const vecowLinkController = createVecowLinkController(showToast);
+const sourceMaintenance = createSourceMaintenance({
+  ui,
+  autoRestoreExcelData,
+  getSafeErrorMessage,
+  scrollToElement,
+  setButtonLoading,
+  setKoyaModelMaintenanceVisibility,
+  setNyxModelMaintenanceVisibility,
+  vecowLinkController
+});
+const {
+  setMaintenanceEntriesVisibility,
+  setShipmentSourceMaintenanceVisibility,
+  syncShipmentRefreshStatus
+} = sourceMaintenance;
+
 async function main() {
   updateStatus(ui, "骨架初始化完成。");
+  applyTheme(readStorageItem(THEME_STORAGE_KEY, "dark"));
   hydrateEditableCustomerCustomTabs();
   renderHomePrintNoticeBoard();
   updateTabUi();
@@ -3314,6 +3648,11 @@ async function main() {
   setHomeCustomerTheme("");
   syncHomeSearchModeUi();
   setClgSettingsVisibility(false);
+  setKoyaModelMaintenanceVisibility(false);
+  setNyxModelMaintenanceVisibility(false);
+  setShipmentSourceMaintenanceVisibility(false);
+  setMaintenanceEntriesVisibility(false);
+  void vecowLinkController.load();
   refreshClgPlannedSerialPreview();
   setSearchEnabled(false);
   setExportEnabled(false);
@@ -3324,7 +3663,31 @@ async function main() {
   } catch (error) {
     updateHomeStatus(`已列印公告載入失敗：${getSafeErrorMessage(error)}`, true);
   }
+  try {
+    await loadKoyaModelEntries();
+  } catch (error) {
+    const message = `KOYA 型號主檔載入失敗：${getSafeErrorMessage(error)}`;
+    updateStatus({ status: ui.koyaModelStatus }, message, true);
+    showToast(message, "error");
+  }
+  try {
+    await loadNyxModelEntries();
+  } catch (error) {
+    const message = `NYX 型號主檔載入失敗：${getSafeErrorMessage(error)}`;
+    updateStatus({ status: ui.nyxModelStatus }, message, true);
+    showToast(message, "error");
+  }
+  try {
+    await Promise.all([
+      loadMonthlyReferenceEntries("koya"),
+      loadMonthlyReferenceEntries("nyx")
+    ]);
+  } catch (error) {
+    const message = `月份對照主檔載入失敗：${getSafeErrorMessage(error)}`;
+    showToast(message, "error");
+  }
   await autoRestoreExcelData();
+  await syncShipmentRefreshStatus(false);
 }
 
 main();

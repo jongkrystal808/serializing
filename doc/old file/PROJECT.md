@@ -1,3 +1,8 @@
+> **歷史文件現況補充（2026-09-18／工作樹 v0.3.79）**
+> 下文保留當時版本，不代表目前功能或驗收結果。現況已包含來源規則五階段、通用來源自動搜尋與超恩式渲染、富弘年首頁搜尋、勤誠 FZG、DEG，以及主檔／來源維護模組拆分；API 32 組、SQLite 8 表。
+> 本機驗證：7 組前端回歸、後端 114 tests、74 個 Python 檔解析及 0.3.79 release check 全部通過；正式伺服器與真實網路磁碟資料尚未驗收。
+> 請以 [架構](../architecture.md)、[任務](../task.md)、[更新](../update.md)、[排查](../debug.md)、[規則規格](../source-rules-spec.md)、[遷移](../source-rules-stage5.md) 與 [搜尋](../source-search.md) 為準。
+
 # Project Overview
 
 **Project:** SN-GENERATOR（序號產生器）

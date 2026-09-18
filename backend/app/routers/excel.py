@@ -1,9 +1,11 @@
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 
 from app.core.config import settings
+from app.core.dependencies import ShipmentSourceServiceDependency
 from app.core.errors import AppError
 from app.core.responses import ok
-from app.schemas.excel import ParseExcelRequest
+from app.schemas.common import ApiResponse
+from app.schemas.excel import ParseExcelRequest, ParseExcelResponse
 from app.services.excel_service import excel_service
 
 router = APIRouter(prefix="/excel", tags=["excel"])
@@ -29,13 +31,13 @@ def _read_upload_with_limit(file: UploadFile, max_bytes: int) -> bytes:
     return file_bytes
 
 
-@router.post("/parse")
+@router.post("/parse", response_model=ApiResponse[ParseExcelResponse])
 def parse_excel(
     customer: str = Form(...),
     sheet_name: str = Form(...),
     parse_rules: str = Form("arrow"),
     file: UploadFile = File(...),
-):
+) -> ApiResponse[ParseExcelResponse]:
     payload = ParseExcelRequest(
         customer=customer,
         sheet_name=sheet_name,
@@ -45,11 +47,17 @@ def parse_excel(
     # 同步讀檔與 Excel 解析交由 FastAPI thread pool 執行，避免阻塞 event loop。
     file_bytes = _read_upload_with_limit(file, settings.max_excel_upload_bytes)
     result = excel_service.parse(payload, file_bytes)
-    return ok(result.model_dump(), "Excel 解析請求已接收")
+    return ok(result, "Excel 解析請求已接收")
 
 
-@router.get("/load-default")
-def load_default_excel(customer: str = Query(...)):
+@router.get("/load-default", response_model=ApiResponse[ParseExcelResponse])
+def load_default_excel(service: ShipmentSourceServiceDependency, customer: str = Query(...)) -> ApiResponse[ParseExcelResponse]:
     """依伺服器設定的固定路徑直接載入 Excel，不需使用者上傳。"""
-    result = excel_service.load_from_default_path(customer)
-    return ok(result.model_dump(), f"已載入 {customer} 預設 Excel")
+    result = excel_service.load_from_default_path(customer, source_service=service)
+    return ok(result, f"已載入 {customer} 預設 Excel")
+
+
+@router.get("/load-source", response_model=ApiResponse[ParseExcelResponse])
+def load_source_excel(service: ShipmentSourceServiceDependency, source_key: str = Query(..., min_length=1)):
+    result = excel_service.load_from_default_path("deg", source_service=service, source_key=source_key)
+    return ok(result, "已載入自訂來源總表資料")

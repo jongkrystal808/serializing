@@ -8,6 +8,7 @@ from app.core.errors import AppError
 from app.schemas.export import ExportRequest
 
 EXPORT_HEADERS: Dict[str, Dict[str, Any]] = {
+    "deg": {"SN": ["SN"]},
     "yingbang": {
         "SN": ["SN", "Datecode", "PN"],
     },

@@ -1,26 +1,31 @@
+from contextlib import closing
+import logging
 import os
 import sqlite3
 from datetime import datetime
-from threading import Lock
-from typing import Dict, List
+from typing import Dict, List, Optional, Union
 
 from app.core.config import settings
+from app.core.customers import Customer
 from app.core.errors import AppError
+from app.core.logging import log_event
 from app.schemas.history import GenerationRecord, HistoryEntry
 
 
+logger = logging.getLogger(__name__)
+
+
 class HistoryService:
-    def __init__(self) -> None:
-        self.db_path = settings.db_path
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        self.db_path = db_path or settings.db_path
         self.allowed_customers = set(settings.allowed_customers)
-        self._lock = Lock()
-        self.initialize()
 
     def initialize(self) -> None:
         folder = os.path.dirname(self.db_path)
         if folder:
             os.makedirs(folder, exist_ok=True)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
+            journal_mode = conn.execute("PRAGMA journal_mode=WAL").fetchone()[0]
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS serial_history (
@@ -43,11 +48,11 @@ class HistoryService:
                 )
                 """
             )
-            conn.commit()
+        log_event(logger, logging.INFO, "history_database_initialized", journal_mode=journal_mode)
 
     def list_entries(self, customer: str) -> List[HistoryEntry]:
         customer_key = self._normalize_customer(customer)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             rows = conn.execute(
                 """
                 SELECT history_key, last_serial
@@ -62,7 +67,7 @@ class HistoryService:
     def get_last_serial(self, customer: str, key: str) -> int:
         customer_key = self._normalize_customer(customer)
         history_key = self._normalize_key(key)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             row = conn.execute(
                 """
                 SELECT last_serial
@@ -77,7 +82,7 @@ class HistoryService:
 
     def list_generation_records(self, customer: str) -> List[GenerationRecord]:
         customer_key = self._normalize_customer(customer)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             rows = conn.execute(
                 """
                 SELECT history_key, record, created_at
@@ -108,22 +113,30 @@ class HistoryService:
         now = self._now_text()
         record_text = str(record or "").strip()
 
-        with self._lock, self._connect() as conn:
-            # 流水號的建立、遞增與回讀必須由同一個 SQL 原子完成，才能涵蓋多 Worker。
+        with closing(self._connect()) as conn, conn:
+            # 先取得 SQLite write lock，確保整段讀寫交易可跨 Worker 序列化。
+            conn.execute("BEGIN IMMEDIATE")
             if increment > 0:
                 row = conn.execute(
+                    """
+                    SELECT last_serial
+                    FROM serial_history
+                    WHERE customer = ? AND history_key = ?
+                    """,
+                    (customer_key, history_key),
+                ).fetchone()
+                current = int(row[0]) if row else 0
+                next_value = current + increment
+                conn.execute(
                     """
                     INSERT INTO serial_history (customer, history_key, last_serial, updated_at)
                     VALUES (?, ?, ?, ?)
                     ON CONFLICT(customer, history_key) DO UPDATE SET
-                        last_serial = serial_history.last_serial + excluded.last_serial,
+                        last_serial = excluded.last_serial,
                         updated_at = excluded.updated_at
-                    RETURNING last_serial
                     """,
-                    (customer_key, history_key, increment, now),
-                ).fetchone()
-                next_value = int(row[0])
-                current = next_value - increment
+                    (customer_key, history_key, next_value, now),
+                )
             else:
                 row = conn.execute(
                     """
@@ -144,14 +157,60 @@ class HistoryService:
                     """,
                     (customer_key, history_key, record_text, now),
                 )
-            conn.commit()
 
+        log_event(
+            logger,
+            logging.INFO,
+            "history_updated",
+            customer=customer_key,
+            increment=increment,
+            record_added=bool(record_text),
+        )
         return {"previous": current, "current": next_value}
+
+    def reserve_range(self, customer: str, key: str, count: int, *, start: int, maximum: int) -> Dict[str, int]:
+        """Reserve a bounded serial range under one SQLite write transaction."""
+        customer_key = self._normalize_customer(customer)
+        history_key = self._normalize_key(key)
+        if count <= 0:
+            raise AppError("數量必須大於 0", code="INVALID_QTY")
+        with closing(self._connect()) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT last_serial FROM serial_history WHERE customer = ? AND history_key = ?",
+                (customer_key, history_key),
+            ).fetchone()
+            previous = int(row[0]) if row else start - 1
+            current = previous + count
+            if current > maximum:
+                raise AppError("序號已超過範圍上限", code="SERIAL_LIMIT_REACHED")
+            conn.execute(
+                """INSERT INTO serial_history (customer, history_key, last_serial, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(customer, history_key) DO UPDATE SET
+                     last_serial = excluded.last_serial, updated_at = excluded.updated_at""",
+                (customer_key, history_key, current, self._now_text()),
+            )
+        return {"previous": previous, "current": current}
+
+    def set_last_serial(self, customer: str, key: str, value: int) -> None:
+        customer_key = self._normalize_customer(customer)
+        history_key = self._normalize_key(key)
+        with closing(self._connect()) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """INSERT INTO serial_history (customer, history_key, last_serial, updated_at)
+                   VALUES (?, ?, ?, ?)
+                   ON CONFLICT(customer, history_key) DO UPDATE SET
+                     last_serial = excluded.last_serial, updated_at = excluded.updated_at""",
+                (customer_key, history_key, value, self._now_text()),
+            )
 
     def reset_entry(self, customer: str, key: str) -> bool:
         customer_key = self._normalize_customer(customer)
         history_key = self._normalize_key(key)
-        with self._lock, self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
             serial_removed = conn.execute(
                 """
                 DELETE FROM serial_history
@@ -166,18 +225,18 @@ class HistoryService:
                 """,
                 (customer_key, history_key),
             ).rowcount
-            if serial_removed <= 0 and record_removed <= 0:
-                return False
-            conn.commit()
-            return True
+            removed = serial_removed > 0 or record_removed > 0
+        log_event(logger, logging.INFO, "history_reset", customer=customer_key, removed=removed)
+        return removed
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+        conn.execute("PRAGMA busy_timeout=30000")
         conn.row_factory = sqlite3.Row
         return conn
 
-    def _normalize_customer(self, customer: str) -> str:
-        key = str(customer or "").strip()
+    def _normalize_customer(self, customer: Union[str, Customer]) -> str:
+        key = customer.value if isinstance(customer, Customer) else str(customer or "").strip()
         if not key:
             raise AppError("customer 不可為空", code="INVALID_CUSTOMER")
         if key not in self.allowed_customers:
@@ -198,6 +257,3 @@ class HistoryService:
     @staticmethod
     def _now_text() -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-history_service = HistoryService()

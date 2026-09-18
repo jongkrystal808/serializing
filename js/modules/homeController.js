@@ -5,6 +5,8 @@ import {
 } from "./customers.js";
 import { replaceChildrenFromTrustedTemplate } from "./dom.js";
 import { escapeHtmlAttribute } from "./utils.js";
+import { findDegWorkOrderRows } from "./deg.js?v=0.3.68";
+import { findCustomerSources, findSourceRows } from "./sourceSearch.js?v=0.3.76";
 
 export function createHomeController(deps) {
   const {
@@ -32,14 +34,19 @@ export function createHomeController(deps) {
     getHmgModelValue,
     getClgModelValue,
     getRowValueByCustomerColumnCode,
-    updateHomeStatus
+    updateHomeStatus,
+    showToast,
+    scrollToElement,
+    renderHomeCustomerResults = () => {},
+    setFzgSearchResult = () => {}
   } = deps;
 
-  const HOME_WORKORDER_CUSTOMER_ORDER = WORK_ORDER_CUSTOMER_KEYS;
+  const HOME_WORKORDER_CUSTOMER_ORDER = [...WORK_ORDER_CUSTOMER_KEYS, "deg"];
   const HOME_MODEL_CUSTOMER_ORDER = MODEL_CUSTOMER_KEYS;
   const HOME_CUSTOMER_ORDER = [...HOME_WORKORDER_CUSTOMER_ORDER, ...HOME_MODEL_CUSTOMER_ORDER];
   const HOME_SEARCH_MODE_WORKORDER = "workorder";
   const HOME_SEARCH_MODE_MODEL = "model";
+  const HOME_SEARCH_MODE_CUSTOMER = "customer";
   const HOME_HISTORY_KEY_LABEL_MAP = {
     yingbang: "工單",
     lunfei: "週別 key",
@@ -49,6 +56,8 @@ export function createHomeController(deps) {
     clg: "機種名"
   };
 
+  const isGenericSource = (customerKey) => (state.customSourceData || []).some((source) => source.key === customerKey);
+
   function getHomeCustomerLabel(customerKey) {
     const labels = {
       yingbang: "營邦",
@@ -56,9 +65,10 @@ export function createHomeController(deps) {
       bng: "超恩",
       chg: "KOYA",
       hmg: "赫星",
-      clg: "Cubepilot"
+      clg: "Cubepilot",
+      deg: "泉影"
     };
-    return labels[customerKey] || customerKey;
+    return (state.customSourceData || []).find((source) => source.key === customerKey)?.label || labels[customerKey] || customerKey;
   }
 
   function clearHomePendingModelSelection() {
@@ -103,10 +113,17 @@ export function createHomeController(deps) {
 
   function getHomeSearchMode() {
     const mode = String(ui.homeSearchTypeSelect?.value ?? HOME_SEARCH_MODE_WORKORDER).trim();
-    return mode === HOME_SEARCH_MODE_MODEL ? HOME_SEARCH_MODE_MODEL : HOME_SEARCH_MODE_WORKORDER;
+    return [HOME_SEARCH_MODE_MODEL, HOME_SEARCH_MODE_CUSTOMER].includes(mode) ? mode : HOME_SEARCH_MODE_WORKORDER;
   }
 
   function getHomeSearchModeMessages(mode) {
+    if (mode === HOME_SEARCH_MODE_CUSTOMER) {
+      return {
+        placeholder: "輸入客戶關鍵字",
+        empty: "請先輸入客戶關鍵字。",
+        notFound: "查無對應客戶或相關工單。"
+      };
+    }
     if (mode === HOME_SEARCH_MODE_MODEL) {
       return {
         placeholder: "搜尋 hmg / clg 機種（Model）",
@@ -129,7 +146,9 @@ export function createHomeController(deps) {
     }
     updateHomeStatus(mode === HOME_SEARCH_MODE_MODEL
       ? "目前模式：機種（Model）搜尋（hmg / clg）。"
-      : "目前模式：工單 / MO 搜尋（全客戶）。");
+      : mode === HOME_SEARCH_MODE_CUSTOMER
+        ? "目前模式：依客戶關鍵字搜尋所有相關工單。"
+        : "目前模式：工單 / MO 搜尋（全客戶）。");
     clearHomePendingModelSelection();
   }
 
@@ -193,6 +212,7 @@ export function createHomeController(deps) {
     const includeWorkOrder = mode === HOME_SEARCH_MODE_WORKORDER;
     const includeModel = mode === HOME_SEARCH_MODE_MODEL;
     return {
+      ...Object.fromEntries((state.customSourceData || []).map((source) => [source.key, includeWorkOrder ? findSourceRows(source, query) : []])),
       yingbang: includeWorkOrder && state.yingbangRowData.length > 0
         ? findRowsByCustomerColumnCode(state.yingbangRowData, CUSTOMER_KEYS.YINGBANG, "WORK_ORDER", query, { stripAsteriskSuffix: true })
         : [],
@@ -205,6 +225,7 @@ export function createHomeController(deps) {
       chg: includeWorkOrder && state.chgRowData.length > 0
         ? findRowsByCustomerColumnCode(state.chgRowData, CUSTOMER_KEYS.CHG, "WORK_ORDER", query)
         : [],
+      deg: includeWorkOrder ? findDegWorkOrderRows(state.degRowData, query, false, state.degWorkOrderColumn) : [],
       hmg: includeModel && state.hmgRowData.length > 0 ? findHmgRowsByModel(state.hmgRowData, query) : [],
       clg: includeModel && state.clgRowData.length > 0 ? findClgRowsByModel(state.clgRowData, query) : []
     };
@@ -212,11 +233,13 @@ export function createHomeController(deps) {
 
   function decideHomeSearchTarget(query, matchMap, mode) {
     const hasHit = (key) => Array.isArray(matchMap[key]) && matchMap[key].length > 0;
-    const searchOrder = mode === HOME_SEARCH_MODE_MODEL ? HOME_MODEL_CUSTOMER_ORDER : HOME_WORKORDER_CUSTOMER_ORDER;
+    const searchOrder = mode === HOME_SEARCH_MODE_MODEL ? HOME_MODEL_CUSTOMER_ORDER : [...HOME_WORKORDER_CUSTOMER_ORDER, ...(state.customSourceData || []).map((source) => source.key)];
     const exactOrder = searchOrder.filter((key) => {
       if (!hasHit(key)) {
         return false;
       }
+      const source = (state.customSourceData || []).find((item) => item.key === key);
+      if (source) return findSourceRows(source, query, true).length > 0;
       if (key === CUSTOMER_KEYS.YINGBANG) {
         return hasExactTokenMatch(matchMap[key], CUSTOMER_KEYS.YINGBANG, "WORK_ORDER", query, { stripAsteriskSuffix: true });
       }
@@ -225,6 +248,9 @@ export function createHomeController(deps) {
       }
       if (key === CUSTOMER_KEYS.CHG) {
         return hasExactTokenMatch(matchMap[key], CUSTOMER_KEYS.CHG, "WORK_ORDER", query);
+      }
+      if (key === "deg") {
+        return findDegWorkOrderRows(matchMap.deg, query, true, state.degWorkOrderColumn).length > 0;
       }
       if (key === CUSTOMER_KEYS.HMG) {
         return hasExactModelMatch(matchMap[key], query, getHmgModelValue);
@@ -251,17 +277,46 @@ export function createHomeController(deps) {
   }
 
   async function performHomeSearch() {
+    setFzgSearchResult(null);
+    setHomeCustomerTheme("");
     const mode = getHomeSearchMode();
     const modeMessages = getHomeSearchModeMessages(mode);
     const query = String(ui.homeSearchInput?.value ?? "").trim();
     if (!query) {
       updateHomeStatus(modeMessages.empty, true);
+      showToast(modeMessages.empty, "error");
+      return;
+    }
+    if (mode === HOME_SEARCH_MODE_CUSTOMER) {
+      const rowState = { yingbang: "yingbangRowData", lunfei: "lunfeiRowData", bng: "bngRowData", koya: "chgRowData" };
+      const matches = findCustomerSources(state.shipmentSourceEntries, query).map((entry) => {
+        const dynamic = (state.customSourceData || []).find((source) => source.key === entry.key);
+        return { ...entry, rows: dynamic?.rows || (entry.search_customer === "deg" ? state.degRowData : state[rowState[entry.key]]) || [] };
+      });
+      const rowCount = matches.reduce((total, source) => total + source.rows.length, 0);
+      state.currentRow = null;
+      homeRuntime.customer = "";
+      homeRuntime.query = query;
+      setHomeExportEnabled(false);
+      setHomeBngPrintEnabled(false);
+      if (!matches.length || !rowCount) {
+        if (ui.homePreviewPanel) replaceChildrenFromTrustedTemplate(ui.homePreviewPanel, `<p>${escapeHtml(modeMessages.notFound)}</p>`);
+        updateHomeStatus(modeMessages.notFound, true);
+        showToast(modeMessages.notFound, "error");
+        return;
+      }
+      renderHomeCustomerResults(matches, query);
+      updateHomeStatus(`已找到 ${matches.length} 個資料來源，共 ${rowCount} 筆相關工單。`, false, false, true);
+      showToast(`已找到 ${rowCount} 筆相關工單。`, "success");
+      scrollToElement(ui.homePreviewPanel);
       return;
     }
     const matchMap = buildHomeSearchMatchMap(query, mode);
     const target = decideHomeSearchTarget(query, matchMap, mode);
     if (!target) {
+      if (ui.homePreviewPanel) replaceChildrenFromTrustedTemplate(ui.homePreviewPanel, `<p>${escapeHtml(modeMessages.notFound)}</p>`);
       updateHomeStatus(modeMessages.notFound, true);
+      showToast(modeMessages.notFound, "error");
       setHomeExportEnabled(false);
       setHomeBngPrintEnabled(false);
       setHomeCustomerTheme("");
@@ -281,10 +336,11 @@ export function createHomeController(deps) {
       }
       await runHomeSearchByCustomer(target, query);
       const matchedRows = Array.isArray(matchMap[target]) ? matchMap[target] : [];
+      setFzgSearchResult(target === "fzg" && state.currentRow ? { query, row: state.currentRow } : null);
       homeRuntime.customer = target;
       homeRuntime.query = query;
       setHomeCustomerTheme(target);
-      setHomeExportEnabled(Boolean(state.currentRow));
+      setHomeExportEnabled(!isGenericSource(target) && target !== "deg" && Boolean(state.currentRow));
       if (mode === HOME_SEARCH_MODE_MODEL && !state.currentRow && matchedRows.length > 0) {
         renderHomeModelSelectionPanel(target, query, matchedRows);
       } else {
@@ -304,13 +360,25 @@ export function createHomeController(deps) {
           !isDuplicateMoHit,
           isDuplicateMoHit
         );
+        showToast(
+          isDuplicateMoHit
+            ? `${getHomeCustomerLabel(target)} MO ${query} 命中 2 筆，請確認。`
+            : `已命中 ${getHomeCustomerLabel(target)}：${query}`,
+          isDuplicateMoHit ? "info" : "success"
+        );
       } else if (matchedRows.length > 0) {
         updateHomeStatus(`已命中 ${getHomeCustomerLabel(target)} ${matchedRows.length} 筆，請選擇目標資料。`, false, false, true);
+        showToast(`已命中 ${getHomeCustomerLabel(target)} ${matchedRows.length} 筆，請選擇目標資料。`, "info");
       } else {
         updateHomeStatus(`查詢完成：${getHomeCustomerLabel(target)} 未選到可匯出資料。`, true);
+        showToast(`查詢完成：${getHomeCustomerLabel(target)} 未選到可匯出資料。`, "error");
       }
+      scrollToElement(ui.homePreviewPanel);
     } catch (error) {
+      setFzgSearchResult(null);
+      setHomeCustomerTheme("");
       updateHomeStatus(`查詢失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`查詢失敗：${getSafeErrorMessage(error)}`, "error");
       setHomeExportEnabled(false);
       setHomeBngPrintEnabled(false);
     } finally {
@@ -320,6 +388,7 @@ export function createHomeController(deps) {
   }
 
   function onHomeSearchTypeChange() {
+    setFzgSearchResult(null);
     homeRuntime.customer = "";
     homeRuntime.query = "";
     setHomeExportEnabled(false);
@@ -423,6 +492,10 @@ export function createHomeController(deps) {
       return;
     }
     const customerKey = homeRuntime.customer;
+    if (isGenericSource(customerKey)) {
+      updateHomeStatus("此來源使用通用搜尋預覽，尚未設定序號歷史流程。", false);
+      return;
+    }
     try {
       if (!customerKey) {
         const results = await Promise.allSettled(
@@ -476,18 +549,24 @@ export function createHomeController(deps) {
 
   async function onHomeExportClick() {
     const customerKey = homeRuntime.customer;
+    if (isGenericSource(customerKey) || customerKey === "deg") return;
     if (!customerKey) {
       updateHomeStatus("請先完成查詢後再匯出。", true);
       return;
     }
-    setHomeLoading(true, "匯出中...");
+    setHomeLoading(true, "匯出中...", "export");
     try {
       switchCustomerTab(customerKey);
-      await onExportClick();
+      const didExport = await onExportClick();
+      if (!didExport) {
+        return;
+      }
       syncHomePreviewPanel(customerKey);
       updateHomeStatus(`${getHomeCustomerLabel(customerKey)}匯出完成。`);
+      scrollToElement(ui.homeStatus);
     } catch (error) {
       updateHomeStatus(`匯出失敗：${getSafeErrorMessage(error)}`, true);
+      showToast(`匯出失敗：${getSafeErrorMessage(error)}`, "error");
     } finally {
       setHomeLoading(false);
       setHomeBngPrintEnabled(homeRuntime.customer === CUSTOMER_KEYS.BNG && Boolean(state.currentRow));

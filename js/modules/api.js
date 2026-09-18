@@ -1,5 +1,23 @@
 const API_PREFIX = "/api";
 
+export function loadSourceExcelByApi(sourceKey) {
+  return requestJson(`/excel/load-source?source_key=${encodeURIComponent(sourceKey)}`);
+}
+
+// 【用途】讀取超恩 BIOS/FW 一覽表連結。
+export function getVecowLinkByApi() {
+  return requestJson("/vecow-link");
+}
+
+// 【用途】儲存或移除共用的一覽表連結。
+export function saveVecowLinkByApi(url) {
+  return requestJson("/vecow-link", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url })
+  });
+}
+
 function buildApiError(message, details = null) {
   const error = new Error(String(message || "API 請求失敗"));
   if (details) {
@@ -77,6 +95,18 @@ export async function generateSnByApi(payload) {
   });
 }
 
+export function getFzgStatusByApi() {
+  return requestJson("/sn/fzg/status");
+}
+
+export function resetFzgByApi(payload) {
+  return requestJson("/sn/fzg/reset", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
 export async function getHistoryByApi(customer) {
   const key = encodeURIComponent(String(customer ?? "").trim());
   return requestJson(`/history/${key}`, {
@@ -121,11 +151,95 @@ export async function upsertPrintNoticeByApi(payload) {
 }
 
 export async function deletePrintNoticeByApi(payload) {
-  return requestJson("/print-notice/delete", {
+  return requestJson("/print-notice", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+// 【用途】讀取系統內維護的 KOYA 型號主檔。
+export async function getKoyaModelsByApi() {
+  return requestJson("/koya-model", {
+    method: "GET"
+  });
+}
+
+// 【用途】新增或修改一筆 KOYA 型號主檔。
+export async function upsertKoyaModelByApi(payload) {
+  return requestJson("/koya-model/upsert", {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
+    body: JSON.stringify(payload)
+  });
+}
+
+// 【用途】刪除一筆 KOYA 型號主檔。
+export async function deleteKoyaModelByApi(payload) {
+  return requestJson("/koya-model", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+// 【用途】讀取系統內維護的 NYX 型號主檔。
+export async function getNyxModelsByApi() {
+  return requestJson("/nyx-model", {
+    method: "GET"
+  });
+}
+
+// 【用途】新增或修改一筆 NYX 型號主檔。
+export async function upsertNyxModelByApi(payload) {
+  return requestJson("/nyx-model/upsert", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+// 【用途】刪除一筆 NYX 型號主檔。
+export async function deleteNyxModelByApi(payload) {
+  return requestJson("/nyx-model", {
+    method: "DELETE",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+}
+
+// 【用途】讀取指定客戶的月份對照主檔。
+export async function getMonthlyReferencesByApi(customer) {
+  const key = encodeURIComponent(String(customer ?? "").trim());
+  return requestJson(`/monthly-reference/${key}`, { method: "GET" });
+}
+
+// 【用途】新增或修改指定客戶的月份對照。
+export async function upsertMonthlyReferenceByApi(customer, payload) {
+  const key = encodeURIComponent(String(customer ?? "").trim());
+  return requestJson(`/monthly-reference/${key}/upsert`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+// 【用途】刪除指定客戶的月份對照。
+export async function deleteMonthlyReferenceByApi(customer, payload) {
+  const key = encodeURIComponent(String(customer ?? "").trim());
+  return requestJson(`/monthly-reference/${key}`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload)
   });
 }
@@ -135,6 +249,48 @@ export async function loadDefaultExcelByApi(customer) {
   return requestJson(`/excel/load-default?customer=${key}`, {
     method: "GET"
   });
+}
+
+export async function getShipmentRefreshStatusByApi() {
+  return requestJson("/shipment-refresh", { method: "GET" });
+}
+
+export async function startShipmentRefreshByApi() {
+  return requestJson("/shipment-refresh/run", { method: "POST" });
+}
+
+export async function getShipmentSourcesByApi() {
+  return requestJson("/shipment-sources", { method: "GET" });
+}
+
+export async function previewShipmentSourceByApi(payload) {
+  return requestJson("/shipment-sources/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function createShipmentSourceByApi(payload) {
+  return requestJson("/shipment-sources", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateShipmentSourceByApi(sourceKey, payload) {
+  const key = encodeURIComponent(String(sourceKey ?? "").trim());
+  return requestJson(`/shipment-sources/${key}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function resetShipmentSourceByApi(sourceKey) {
+  const key = encodeURIComponent(String(sourceKey ?? "").trim());
+  return requestJson(`/shipment-sources/${key}/reset`, { method: "POST" });
 }
 
 export async function exportWorkbookByApi(payload) {

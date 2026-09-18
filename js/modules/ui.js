@@ -60,17 +60,77 @@ export function bindPreviewTabsIn(rootElement) {
   if (!rootElement) {
     return;
   }
-  const tabs = rootElement.querySelectorAll(".preview-tab[data-tab]");
-  const panes = rootElement.querySelectorAll(".preview-pane");
+  const tabs = [...rootElement.querySelectorAll(".preview-tab[data-tab]")];
+  const panes = [...rootElement.querySelectorAll(".preview-pane[data-pane]")];
+  if (tabs.length === 0) {
+    return;
+  }
+  const tabList = rootElement.querySelector(".preview-tabs");
+  if (tabList) {
+    tabList.setAttribute("role", "tablist");
+    if (!tabList.getAttribute("aria-label")) {
+      tabList.setAttribute("aria-label", "預覽內容");
+    }
+  }
+  const rootId = String(rootElement.id || "preview")
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, "-");
+
+  tabs.forEach((tab, index) => {
+    const tabName = String(tab.getAttribute("data-tab") ?? "").trim();
+    const pane = panes.find((item) => item.getAttribute("data-pane") === tabName);
+    const suffix = tabName.replace(/[^a-zA-Z0-9_-]+/g, "-") || String(index + 1);
+    const tabId = `${rootId}-tab-${suffix}`;
+    tab.id = tabId;
+    tab.setAttribute("role", "tab");
+    if (pane) {
+      const paneId = `${rootId}-tabpanel-${suffix}`;
+      pane.id = paneId;
+      pane.setAttribute("role", "tabpanel");
+      pane.setAttribute("aria-labelledby", tabId);
+      tab.setAttribute("aria-controls", paneId);
+    }
+  });
+
+  const activateTab = (selectedTab, moveFocus = false) => {
+    const selectedName = selectedTab.getAttribute("data-tab");
+    tabs.forEach((tab) => {
+      const isSelected = tab === selectedTab;
+      tab.classList.toggle("active", isSelected);
+      tab.setAttribute("aria-selected", isSelected ? "true" : "false");
+      tab.tabIndex = isSelected ? 0 : -1;
+    });
+    panes.forEach((pane) => {
+      const isActive = pane.getAttribute("data-pane") === selectedName;
+      pane.classList.toggle("active", isActive);
+      pane.hidden = !isActive;
+    });
+    if (moveFocus) {
+      selectedTab.focus();
+    }
+  };
+
+  const initialTab = tabs.find((tab) => tab.classList.contains("active")) || tabs[0];
+  activateTab(initialTab);
   tabs.forEach((tab) => {
     tab.addEventListener("click", () => {
-      const tabName = tab.getAttribute("data-tab");
-      tabs.forEach((item) => item.classList.remove("active"));
-      panes.forEach((pane) => pane.classList.remove("active"));
-      tab.classList.add("active");
-      const pane = rootElement.querySelector(`.preview-pane[data-pane="${tabName}"]`);
-      if (pane) {
-        pane.classList.add("active");
+      activateTab(tab);
+    });
+    tab.addEventListener("keydown", (event) => {
+      const currentIndex = tabs.indexOf(tab);
+      let targetIndex = -1;
+      if (event.key === "ArrowRight") {
+        targetIndex = (currentIndex + 1) % tabs.length;
+      } else if (event.key === "ArrowLeft") {
+        targetIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+      } else if (event.key === "Home") {
+        targetIndex = 0;
+      } else if (event.key === "End") {
+        targetIndex = tabs.length - 1;
+      }
+      if (targetIndex >= 0) {
+        event.preventDefault();
+        activateTab(tabs[targetIndex], true);
       }
     });
   });

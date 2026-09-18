@@ -1,13 +1,20 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypeVar
 
 from app.schemas.common import ApiResponse, ErrorDetail
 
 
-def ok(data: Optional[Dict[str, Any]] = None, message: str = "ok") -> ApiResponse:
-    return ApiResponse(success=True, message=message, data=data or {}, error=None)
+DataT = TypeVar("DataT")
 
 
-def fail(code: str, message: str, details: Optional[Dict[str, Any]] = None) -> ApiResponse:
+def ok(data: DataT, message: str = "ok") -> ApiResponse[DataT]:
+    return ApiResponse(success=True, message=message, data=data, error=None)
+
+
+def fail(
+    code: str,
+    message: str,
+    details: Optional[Dict[str, Any]] = None,
+) -> ApiResponse[Dict[str, Any]]:
     return ApiResponse(
         success=False,
         message=message,

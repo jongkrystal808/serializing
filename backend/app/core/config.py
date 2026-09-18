@@ -1,6 +1,33 @@
 import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Dict, List
+
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _default_excel_path() -> str:
+    return os.getenv(
+        "DEFAULT_EXCEL_PATH",
+        "/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx",
+    ).strip()
+
+
+def _shipment_refresh_script_path() -> str:
+    configured = os.getenv("SHIPMENT_REFRESH_SCRIPT_PATH", "").strip()
+    if configured:
+        return configured
+    return str((BACKEND_ROOT / "app" / "tools" / "shipment_merge.py").resolve())
+
+
+def _resolve_db_path() -> str:
+    """Resolve the SQLite path independently of the process working directory."""
+    configured_path = os.getenv("DB_PATH")
+    db_path = Path(configured_path).expanduser() if configured_path else Path("data/sn_generator.db")
+    if not db_path.is_absolute():
+        db_path = BACKEND_ROOT / db_path
+    return str(db_path.resolve())
 
 
 def _read_positive_int(name: str, default: int) -> int:
@@ -40,8 +67,8 @@ class Settings:
     app_name: str = "SN-GENERATOR API"
     app_version: str = "0.1.0"
     api_prefix: str = "/api"
-    db_path: str = "backend/data/sn_generator.db"
-    allowed_customers: tuple[str, ...] = ("yingbang", "lunfei", "bng", "chg", "hmg", "clg")
+    db_path: str = field(default_factory=_resolve_db_path)
+    allowed_customers: tuple[str, ...] = ("yingbang", "lunfei", "bng", "chg", "hmg", "clg", "deg", "fzg")
     cors_allowed_origins: tuple[str, ...] = field(default_factory=_read_cors_allowed_origins)
     max_excel_upload_bytes: int = field(
         default_factory=lambda: _read_positive_int("MAX_EXCEL_UPLOAD_BYTES", 20 * 1024 * 1024)
@@ -49,6 +76,8 @@ class Settings:
     max_excel_uncompressed_bytes: int = field(
         default_factory=lambda: _read_positive_int("MAX_EXCEL_UNCOMPRESSED_BYTES", 100 * 1024 * 1024)
     )
+    default_excel_path: str = field(default_factory=_default_excel_path)
+    shipment_refresh_script_path: str = field(default_factory=_shipment_refresh_script_path)
 
     @property
     def max_excel_request_bytes(self) -> int:
@@ -56,42 +85,47 @@ class Settings:
         return self.max_excel_upload_bytes + 1024 * 1024
 
     # -------------------------------------------------------------------------
-    # 【測試機環境】
-    # 以下路徑為本機開發 Docker 測試用，對應 docker-compose.yml 中的 volume mount：
-    #   - ./出貨記錄總表.xlsx → 容器內 /mnt/testdata/出貨記錄總表.xlsx
-    #
-    # 正式機環境路徑（請勿直接修改，切換時直接替換整個 default_excel 區塊）：
-    #   path="/mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx"
+    # 【正式環境】
+    # 總表預設位於 /mnt/netdisk/TE/個人資料/To Claire/出貨記錄總表.xlsx，
+    # 需要切換測試檔時使用 DEFAULT_EXCEL_PATH 覆寫。
     # -------------------------------------------------------------------------
     default_excel: Dict[str, CustomerFileConfig] = field(default_factory=lambda: {
+        "fzg": CustomerFileConfig(
+            path=_default_excel_path(),
+            sheet_name="勤誠出貨",
+            parse_rules=["trim"],
+        ),
+        "deg": CustomerFileConfig(
+            path=_default_excel_path(),
+            sheet_name="DEG",
+            parse_rules=["trim"],
+        ),
         "yingbang": CustomerFileConfig(
-            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】掛載自本機 Serializing/出貨記錄總表.xlsx
+            path=_default_excel_path(),
             sheet_name="營邦出貨",
             parse_rules=["arrow"],
         ),
         "lunfei": CustomerFileConfig(
-            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】同上
+            path=_default_excel_path(),
             sheet_name="倫飛出貨",
             parse_rules=["arrow"],
         ),
         "bng": CustomerFileConfig(
-            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】同上
+            path=_default_excel_path(),
             sheet_name="超恩出貨",
             parse_rules=["trim"],
         ),
         "chg": CustomerFileConfig(
-            path="/mnt/testdata/出貨記錄總表.xlsx",  # 【測試機】同上
+            path=_default_excel_path(),
             sheet_name="KOYA出貨",
             parse_rules=["trim"],
         ),
         "clg": CustomerFileConfig(
-            # 【測試機】本機無此檔，load-default 對 clg 會回傳 DEFAULT_FILE_NOT_FOUND（正常）
             path="/mnt/netdisk/@思創出貨計畫(Cubepilot)/各機種貼紙代碼/PCB板階、測試階序號编碼.xls",
             sheet_name="板階序號編碼",
             parse_rules=["none"],
         ),
         "hmg": CustomerFileConfig(
-            # 【測試機】本機無此檔，load-default 對 hmg 會回傳 DEFAULT_FILE_NOT_FOUND（正常）
             path="/mnt/netdisk/@思創出貨計畫(Cubepilot)/各機種貼紙代碼/組裝、包裝階序號編碼.xls",
             sheet_name="組測序號編碼",
             parse_rules=["trim"],
@@ -100,40 +134,3 @@ class Settings:
 
 
 settings = Settings()
-
-
-#     default_excel: Dict[str, CustomerFileConfig] = field(default_factory=lambda: {
-#         "yingbang": CustomerFileConfig(
-#             path=r"H:\TE\個人資料\To Claire\出貨記錄總表.xlsx",
-#             sheet_name="營邦出貨",
-#             parse_rules=["arrow"],
-#         ),
-#         "lunfei": CustomerFileConfig(
-#             path=r"H:\TE\個人資料\To Claire\出貨記錄總表.xlsx",
-#             sheet_name="倫飛出貨",
-#             parse_rules=["arrow"],
-#         ),
-#         "bng": CustomerFileConfig(
-#             path=r"H:\TE\個人資料\To Claire\出貨記錄總表.xlsx",
-#             sheet_name="超恩出貨",
-#             parse_rules=["trim"],
-#         ),
-#         "chg": CustomerFileConfig(
-#             path=r"H:\TE\個人資料\To Claire\出貨記錄總表.xlsx",
-#             sheet_name="KOYA出貨",
-#             parse_rules=["trim"],
-#         ),
-#         "clg": CustomerFileConfig(
-#             path=r"H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\組裝、包裝階序號編碼.xls",
-#             sheet_name="Sheet1",
-#             parse_rules=["trim"],
-#         ),
-#         "hmg": CustomerFileConfig(
-#             path=r"H:\@思創出貨計畫(Cubepilot)\各機種貼紙代碼\PCB板階、測試階序號编碼.xls",
-#             sheet_name="Sheet1",
-#             parse_rules=["none"],
-#         ),
-#     })
-#
-#
-# settings = Settings()

@@ -1,7 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Lock
 import sys
 import unittest
 from unittest.mock import patch
@@ -19,11 +18,9 @@ from app.services.history_service import HistoryService  # noqa: E402
 
 class P0RegressionTests(unittest.TestCase):
     def _make_history_service(self, db_path: str) -> HistoryService:
-        """建立各自持有 Process Lock、但共用同一 SQLite 檔的測試服務。"""
-        service = HistoryService.__new__(HistoryService)
-        service.db_path = db_path
+        """建立無共享記憶體、但共用同一 SQLite 檔的測試服務。"""
+        service = HistoryService(db_path=db_path)
         service.allowed_customers = {"yingbang"}
-        service._lock = Lock()
         service.initialize()
         return service
 

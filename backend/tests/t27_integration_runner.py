@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from dataclasses import dataclass
 from datetime import datetime
@@ -14,8 +15,6 @@ from openpyxl import Workbook, load_workbook
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = PROJECT_ROOT / "backend"
 sys.path.insert(0, str(BACKEND_ROOT))
-
-from app.services.history_service import history_service  # noqa: E402
 
 TEST_DB_PATH = BACKEND_ROOT / "data" / "sn_generator_t27.db"
 
@@ -59,23 +58,59 @@ def run_case(case_id: str, title: str, fn: Callable[[], str], results: List[Case
         results.append(CaseResult(case_id=case_id, title=title, passed=False, details=str(error)))
 
 
-def setup_test_db() -> None:
-    TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if TEST_DB_PATH.exists():
-        TEST_DB_PATH.unlink()
-    history_service.db_path = str(TEST_DB_PATH)
-    history_service.initialize()
+def setup_test_db(db_path: Path) -> None:
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    if db_path.exists():
+        db_path.unlink()
+    os.environ["DB_PATH"] = str(db_path)
 
 
-def main() -> int:
-    setup_test_db()
+def build_sample_excel_bytes() -> bytes:
+    """建立 T27 所需的最小多工作表 Excel，避免依賴 repository 外部檔案。"""
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    fixtures = {
+        "營邦出貨": (
+            ["工單號", "採單號碼", "DDC料號", "品名", "料號", "數量"],
+            ["WO001", "PO001", "DDC001", "Model-Y", "PN001", 2],
+        ),
+        "倫飛出貨": (
+            ["MO", "Model", "工單", "P/N", "加工WO#", "對應PCBA", "Q'ty"],
+            ["MO001", "BAG017-AAA", "LWO001", "PNL001", "PRO001", "PCBA001", 2],
+        ),
+        "超恩出貨": (
+            ["MO", "機種名稱", "機種料號", "生產數量", "序號區間"],
+            ["BMO001", "ModelA", "PART001", 2, "1001~1002"],
+        ),
+        "KOYA出貨": (
+            ["工單", "機種", "PN", "小張貼紙", "滿箱數量"],
+            ["CWO001", "KModel", "KPN001", 2, 1],
+        ),
+    }
+    for sheet_name, (headers, row) in fixtures.items():
+        sheet = workbook.create_sheet(sheet_name)
+        sheet.append(headers)
+        sheet.append(row)
+    buffer = BytesIO()
+    workbook.save(buffer)
+    workbook.close()
+    return buffer.getvalue()
 
+
+def main(db_path: Path | None = None) -> int:
+    active_db_path = db_path or TEST_DB_PATH
+    original_db_path_env = os.environ.get("DB_PATH")
+    setup_test_db(active_db_path)
+
+    from app.core.config import settings  # noqa: WPS433,E402
     from app.main import app  # noqa: WPS433,E402
 
+    original_settings_db_path = settings.db_path
+    object.__setattr__(settings, "db_path", str(active_db_path))
     client = TestClient(app)
-    sample_excel = PROJECT_ROOT / "tmp_t25.xlsx"
-    assert_true(sample_excel.exists(), f"找不到整合測試樣本檔：{sample_excel}")
-    excel_bytes = sample_excel.read_bytes()
+    client.__enter__()
+    sample_excel_name = "t27-generated-fixture.xlsx"
+    excel_bytes = build_sample_excel_bytes()
 
     def parse_excel(customer: str, sheet_name: str, parse_rules: str) -> dict:
         response = client.post(
@@ -87,7 +122,7 @@ def main() -> int:
             },
             files={
                 "file": (
-                    sample_excel.name,
+                    sample_excel_name,
                     excel_bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
@@ -424,7 +459,7 @@ def main() -> int:
             data={"customer": "yingbang", "sheet_name": "不存在的工作表", "parse_rules": "arrow"},
             files={
                 "file": (
-                    sample_excel.name,
+                    sample_excel_name,
                     excel_bytes,
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
@@ -497,7 +532,7 @@ def main() -> int:
     failed_count = len(results) - passed_count
     summary = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "db_path": str(TEST_DB_PATH),
+        "db_path": str(active_db_path),
         "passed": passed_count,
         "failed": failed_count,
         "results": [
@@ -510,6 +545,12 @@ def main() -> int:
             for item in results
         ],
     }
+    client.__exit__(None, None, None)
+    object.__setattr__(settings, "db_path", original_settings_db_path)
+    if original_db_path_env is None:
+        os.environ.pop("DB_PATH", None)
+    else:
+        os.environ["DB_PATH"] = original_db_path_env
     print(json.dumps(summary, ensure_ascii=False, indent=2))
     return 0 if failed_count == 0 else 1
 

@@ -1,3 +1,5 @@
+import { showToast } from "./toast.js";
+
 // 【用途】使用舊版 document.execCommand('copy') 作為剪貼簿 fallback（支援非 HTTPS 情境）
 function copyTextByExecCommand(value) {
   const textarea = document.createElement("textarea");
@@ -61,6 +63,7 @@ export function bindSheetCopyCellsIn(rootElement, onCopyError) {
     try {
       await copyTextToClipboard(value);
       cell.classList.add("copied");
+      showToast("已複製到剪貼簿。", "success");
       setTimeout(() => {
         cell.classList.remove("copied");
       }, 700);
@@ -83,6 +86,7 @@ export function bindCopyButtons(ui, onCopyError) {
         await copyTextToClipboard(copyValue);
         button.textContent = copiedText;
         button.classList.add("copied");
+        showToast("已複製到剪貼簿。", "success");
         setTimeout(() => {
           button.textContent = originalText;
           button.classList.remove("copied");
@@ -108,6 +112,7 @@ export function bindCopyButtonsIn(rootElement, onCopyError) {
         await copyTextToClipboard(copyValue);
         button.textContent = copiedText;
         button.classList.add("copied");
+        showToast("已複製到剪貼簿。", "success");
         setTimeout(() => {
           button.textContent = originalText;
           button.classList.remove("copied");

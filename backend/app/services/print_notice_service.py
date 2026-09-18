@@ -1,26 +1,30 @@
+from contextlib import closing
+import logging
 import os
 import sqlite3
 from datetime import datetime
-from threading import Lock
-from typing import List
+from typing import List, Optional, Union
 
 from app.core.config import settings
+from app.core.customers import Customer
 from app.core.errors import AppError
+from app.core.logging import log_event
 from app.schemas.print_notice import PrintNoticeEntry
 
 
+logger = logging.getLogger(__name__)
+
+
 class PrintNoticeService:
-    def __init__(self) -> None:
-        self.db_path = settings.db_path
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        self.db_path = db_path or settings.db_path
         self.allowed_customers = set(settings.allowed_customers)
-        self._lock = Lock()
-        self.initialize()
 
     def initialize(self) -> None:
         folder = os.path.dirname(self.db_path)
         if folder:
             os.makedirs(folder, exist_ok=True)
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS print_notice (
@@ -33,10 +37,9 @@ class PrintNoticeService:
                 )
                 """
             )
-            conn.commit()
 
     def list_entries(self) -> List[PrintNoticeEntry]:
-        with self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
             rows = conn.execute(
                 """
                 SELECT customer, customer_label, workorder_label, workorder_value, created_at
@@ -69,7 +72,8 @@ class PrintNoticeService:
         workorder_value_text = self._normalize_text(workorder_value, "workorder_value")
         now = self._now_text()
 
-        with self._lock, self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 """
                 INSERT INTO print_notice (
@@ -89,8 +93,8 @@ class PrintNoticeService:
                     now,
                 ),
             )
-            conn.commit()
 
+        log_event(logger, logging.INFO, "print_notice_updated", customer=customer_key)
         return PrintNoticeEntry(
             customer=customer_key,
             customer_label=customer_label_text,
@@ -102,7 +106,8 @@ class PrintNoticeService:
     def delete_entry(self, customer: str, workorder_value: str) -> bool:
         customer_key = self._normalize_customer(customer)
         workorder_value_text = self._normalize_text(workorder_value, "workorder_value")
-        with self._lock, self._connect() as conn:
+        with closing(self._connect()) as conn, conn:
+            conn.execute("BEGIN IMMEDIATE")
             removed = conn.execute(
                 """
                 DELETE FROM print_notice
@@ -110,16 +115,17 @@ class PrintNoticeService:
                 """,
                 (customer_key, workorder_value_text),
             ).rowcount
-            conn.commit()
-        return removed > 0
+        was_removed = removed > 0
+        log_event(logger, logging.INFO, "print_notice_deleted", customer=customer_key, removed=was_removed)
+        return was_removed
 
     def _connect(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
         return conn
 
-    def _normalize_customer(self, customer: str) -> str:
-        key = str(customer or "").strip()
+    def _normalize_customer(self, customer: Union[str, Customer]) -> str:
+        key = customer.value if isinstance(customer, Customer) else str(customer or "").strip()
         if not key:
             raise AppError("customer 不可為空", code="INVALID_CUSTOMER")
         if key not in self.allowed_customers:
@@ -140,6 +146,3 @@ class PrintNoticeService:
     @staticmethod
     def _now_text() -> str:
         return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-print_notice_service = PrintNoticeService()

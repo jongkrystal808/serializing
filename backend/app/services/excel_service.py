@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+from threading import RLock
+from time import monotonic
 from typing import Dict, List
 from zipfile import BadZipFile, ZipFile
 
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
-from app.core.config import settings
+from app.core.config import settings, CustomerFileConfig
 from app.core.errors import AppError
 from app.schemas.excel import ParseExcelRequest, ParseExcelResponse
 
@@ -16,6 +18,7 @@ ARROW_PATTERN = ("->", "→", ">")
 OLE2_SIGNATURE = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1"
 ZIP_SIGNATURE = b"PK\x03\x04"
 DELETED_MARKER = "[已刪除]"
+DEFAULT_WORKBOOK_CACHE_TTL_SECONDS = 30
 
 COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
     "yingbang": {
@@ -80,10 +83,23 @@ COLUMN_ALIASES: Dict[str, Dict[str, List[str]]] = {
 
 
 class ExcelService:
-    def load_from_default_path(self, customer: str) -> ParseExcelResponse:
+    def __init__(self) -> None:
+        self._default_workbook_cache = {}
+        self._default_workbook_cache_lock = RLock()
+
+    def load_from_default_path(self, customer: str, source_service=None, source_key=None) -> ParseExcelResponse:
         """依 config 設定的固定路徑直接讀取 Excel，不需使用者上傳。"""
         from pathlib import Path as _Path
         cfg = settings.default_excel.get(customer)
+        binding = None
+        if source_key:
+            binding = next((entry for entry in source_service.list_entries(readonly=True) if entry.key == source_key and (entry.is_custom or entry.key == "dcg")), None)
+            if binding is None:
+                raise AppError("自訂來源不存在", code="SOURCE_NOT_FOUND", status_code=404)
+        elif customer == "deg" and source_service is not None:
+            binding = source_service.get_search_entry(customer)
+        if binding:
+            cfg = CustomerFileConfig(settings.default_excel_path, binding.label, ["trim"])
         if cfg is None:
             raise AppError(
                 f"customer '{customer}' 尚未設定預設檔案路徑",
@@ -98,24 +114,64 @@ class ExcelService:
                 status_code=404,
                 details={"path": cfg.path},
             )
-        with file_path.open("rb") as file_stream:
-            file_bytes = file_stream.read(settings.max_excel_upload_bytes + 1)
-        if len(file_bytes) > settings.max_excel_upload_bytes:
-            raise AppError(
-                "預設 Excel 檔案過大",
-                code="FILE_TOO_LARGE",
-                status_code=413,
-                details={"max_file_bytes": settings.max_excel_upload_bytes},
-            )
         payload = ParseExcelRequest(
             customer=customer,
             sheet_name=cfg.sheet_name,
             file_name=file_path.name,
             parse_rules=cfg.parse_rules,
         )
-        return self.parse(payload, file_bytes)
+        result = self._parse_cached_default(file_path, payload)
+        if binding and binding.work_order_column:
+            headers = list(result.rows[0]) if result.rows else []
+            normalized = "".join(binding.work_order_column.split()).casefold()
+            column = next((name for name in headers if "".join(name.split()).casefold() == normalized), None)
+            if result.rows and column is None:
+                raise AppError(f"{binding.label}搜尋欄位不存在：{binding.work_order_column}，請填寫匯入後的欄名", code="SOURCE_SEARCH_COLUMN_NOT_FOUND", details={"headers": headers})
+            result.resolved_columns["WORK_ORDER"] = column or binding.work_order_column
+        if source_key:
+            result.customer = source_key
+        return result
 
     def parse(self, payload: ParseExcelRequest, file_bytes: bytes) -> ParseExcelResponse:
+        if not file_bytes:
+            raise AppError("上傳檔案內容為空", code="EMPTY_FILE")
+
+        workbook_type, workbook = self._load_workbook(payload.file_name, file_bytes)
+        try:
+            return self._parse_workbook(payload, workbook_type, workbook)
+        finally:
+            self._close_workbook(workbook_type, workbook)
+
+    def _parse_cached_default(self, file_path: Path, payload: ParseExcelRequest) -> ParseExcelResponse:
+        """短期共用同一路徑、同一 mtime 的 workbook，避免首頁重複載入。"""
+        resolved_path = str(file_path.resolve())
+        cache_key = (resolved_path, file_path.stat().st_mtime_ns)
+        now = monotonic()
+        with self._default_workbook_cache_lock:
+            for key, (expires_at, workbook_type, workbook) in list(self._default_workbook_cache.items()):
+                if expires_at <= now or (key[0] == resolved_path and key != cache_key):
+                    self._close_workbook(workbook_type, workbook)
+                    del self._default_workbook_cache[key]
+
+            cached = self._default_workbook_cache.get(cache_key)
+            if cached is None:
+                with file_path.open("rb") as file_stream:
+                    file_bytes = file_stream.read(settings.max_excel_upload_bytes + 1)
+                if len(file_bytes) > settings.max_excel_upload_bytes:
+                    raise AppError(
+                        "預設 Excel 檔案過大",
+                        code="FILE_TOO_LARGE",
+                        status_code=413,
+                        details={"max_file_bytes": settings.max_excel_upload_bytes},
+                    )
+                workbook_type, workbook = self._load_workbook(payload.file_name, file_bytes)
+                cached = (now + DEFAULT_WORKBOOK_CACHE_TTL_SECONDS, workbook_type, workbook)
+                self._default_workbook_cache[cache_key] = cached
+
+            _, workbook_type, workbook = cached
+            return self._parse_workbook(payload, workbook_type, workbook)
+
+    def _parse_workbook(self, payload: ParseExcelRequest, workbook_type: str, workbook) -> ParseExcelResponse:
         customer = payload.customer.strip()
         if customer not in settings.allowed_customers:
             raise AppError(
@@ -123,44 +179,13 @@ class ExcelService:
                 code="UNSUPPORTED_CUSTOMER",
                 details={"allowed_customers": list(settings.allowed_customers)},
             )
-        if not file_bytes:
-            raise AppError("上傳檔案內容為空", code="EMPTY_FILE")
-
-        workbook_type, workbook = self._load_workbook(payload.file_name, file_bytes)
-        try:
-            if customer == "hmg":
-                parsed_rows, resolved_columns = self._parse_hmg_columnar_rows(
-                    workbook_type=workbook_type,
-                    workbook=workbook,
-                    sheet_name=payload.sheet_name,
-                    parse_rules=payload.parse_rules,
-                )
-                return ParseExcelResponse(
-                    customer=customer,
-                    sheet_name=payload.sheet_name,
-                    file_name=payload.file_name,
-                    rows_count=len(parsed_rows),
-                    rows=parsed_rows,
-                    resolved_columns=resolved_columns,
-                )
-
-            sheet_names = self._get_sheet_names(workbook_type, workbook)
-            if payload.sheet_name not in sheet_names:
-                raise AppError(
-                    f"找不到工作表：{payload.sheet_name}",
-                    code="SHEET_NOT_FOUND",
-                    details={"available_sheets": sheet_names},
-                )
-
-            rows_iter = self._iter_rows(workbook_type, workbook, payload.sheet_name)
-            headers = self._read_headers(rows_iter)
-            if not headers:
-                raise AppError("Excel 表頭為空，無法解析", code="EMPTY_HEADER")
-
-            parsed_rows = self._read_rows(rows_iter, headers, payload.parse_rules)
-            if customer == "bng":
-                parsed_rows = self._sanitize_bng_rows(parsed_rows)
-            resolved_columns = self._resolve_columns(customer, headers)
+        if customer == "hmg":
+            parsed_rows, resolved_columns = self._parse_hmg_columnar_rows(
+                workbook_type=workbook_type,
+                workbook=workbook,
+                sheet_name=payload.sheet_name,
+                parse_rules=payload.parse_rules,
+            )
             return ParseExcelResponse(
                 customer=customer,
                 sheet_name=payload.sheet_name,
@@ -169,8 +194,32 @@ class ExcelService:
                 rows=parsed_rows,
                 resolved_columns=resolved_columns,
             )
-        finally:
-            self._close_workbook(workbook_type, workbook)
+
+        sheet_names = self._get_sheet_names(workbook_type, workbook)
+        if payload.sheet_name not in sheet_names:
+            raise AppError(
+                f"找不到工作表：{payload.sheet_name}",
+                code="SHEET_NOT_FOUND",
+                details={"available_sheets": sheet_names},
+            )
+
+        rows_iter = self._iter_rows(workbook_type, workbook, payload.sheet_name)
+        headers = self._read_headers(rows_iter)
+        if not headers:
+            raise AppError("Excel 表頭為空，無法解析", code="EMPTY_HEADER")
+
+        parsed_rows = self._read_rows(rows_iter, headers, payload.parse_rules)
+        if customer == "bng":
+            parsed_rows = self._sanitize_bng_rows(parsed_rows)
+        resolved_columns = self._resolve_columns(customer, headers)
+        return ParseExcelResponse(
+            customer=customer,
+            sheet_name=payload.sheet_name,
+            file_name=payload.file_name,
+            rows_count=len(parsed_rows),
+            rows=parsed_rows,
+            resolved_columns=resolved_columns,
+        )
 
     @staticmethod
     def _resolve_reader_order(file_name: str, file_bytes: bytes) -> List[str]:
@@ -279,7 +328,7 @@ class ExcelService:
     @staticmethod
     def _read_headers(rows_iter) -> List[str]:
         for row in rows_iter:
-            candidates = [str(cell or "").strip() for cell in row]
+            candidates = [ExcelService._cell_to_text(cell) for cell in row]
             if any(candidates):
                 return candidates
         return []
@@ -290,7 +339,7 @@ class ExcelService:
             parsed = {}
             is_empty = True
             for index, header in enumerate(headers):
-                header_text = str(header or "").strip()
+                header_text = self._cell_to_text(header)
                 if not header_text:
                     continue
                 raw_value = row[index] if index < len(row) else ""
@@ -303,7 +352,7 @@ class ExcelService:
         return rows
 
     def _apply_parse_rules(self, value, parse_rules: List[str]) -> str:
-        text = str(value or "").strip()
+        text = self._cell_to_text(value)
         active_rules = parse_rules or ["arrow"]
         for rule in active_rules:
             if rule == "trim":
@@ -311,6 +360,14 @@ class ExcelService:
             if rule == "arrow":
                 text = self._parse_arrow(text)
         return text
+
+    @staticmethod
+    def _cell_to_text(value) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, float) and value.is_integer():
+            return str(int(value))
+        return str(value).strip()
 
     @staticmethod
     def _parse_arrow(text: str) -> str:
@@ -457,7 +514,7 @@ class ExcelService:
         rows_iter = self._iter_rows(workbook_type, workbook, sheet_name)
         max_cols = 0
         for row in rows_iter:
-            values = [str(cell or "").strip() for cell in row]
+            values = [self._cell_to_text(cell) for cell in row]
             matrix.append(values)
             if len(values) > max_cols:
                 max_cols = len(values)

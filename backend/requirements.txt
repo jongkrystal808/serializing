@@ -1,6 +1,18 @@
 fastapi==0.115.6
 uvicorn[standard]==0.32.1
-pydantic==2.10.4
+pydantic==2.10.4; python_version < "3.14"
+pydantic==2.12.5; python_version >= "3.14"
 python-multipart==0.0.20
 openpyxl==3.1.5
 xlrd==2.0.1
+pytest==8.4.2
+httpx==0.28.1
+pandas==2.2.3; python_version < "3.14"
+pandas==2.3.3; python_version >= "3.14"
+numpy==2.0.2; python_version < "3.10"
+numpy==2.2.1; python_version >= "3.10" and python_version < "3.14"
+numpy==2.4.3; python_version >= "3.14"
+extract-msg==0.52.0
+beautifulsoup4==4.12.3
+lxml==5.3.0; python_version < "3.14"
+lxml==6.0.2; python_version >= "3.14"

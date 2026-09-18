@@ -1,8 +1,8 @@
 # Debug Log / 錯誤紀錄
 
 **Project:** SN-GENERATOR（序號產生器）
-**Version:** 0.3.43
-**Last Updated:** 2026-09-09
+**Version:** 0.3.79
+**Last Updated:** 2026-09-18
 
 ---
 
@@ -12,7 +12,49 @@
 
 ---
 
+## 2026-09-14 修正與排查補充
+
+| 問題 | 目前實作／排查 |
+|---|---|
+| 部署覆蓋 SQLite 或啟動 readonly database | systemd 使用獨立 StateDirectory；依 deploy/systemd/README.md 指定現用 DB 執行修復，確認帳號、目錄權限與備份。 |
+| 匯入模組即建表、測試難以隔離 | DB 服務改由 lifespan 初始化與 Depends 注入；直接測試服務需明確 initialize，TestClient 需使用 context manager。 |
+| 倫飛流水號與生成紀錄使用不同 key | SnService 使用解析後 YYYY-Www 寫入計數與紀錄；API 回應 key 仍保留請求查詢值。 |
+| 更新總表途中寫壞檔案 | 先完成暫存 XLSX 再 os.replace；全來源失敗不更新，部分失敗嘗試沿用旧表。 |
+| 更新按鈕無反應或失败 | 先查 /api/shipment-refresh、合併 log、腳本與套件，再查網路磁碟和輸出目錄寫入權限；409 表示同实例已有更新。 |
+| 來源環境變數變更但更新仍讀舊位置 | 已存 SQLite 的設定優先；由維護面板修改或重設對應來源。 |
+| KOYA 維護後預覽仍是舊資料 | 主檔／月份異動會清除舊選取；重新查詢後再生成或匯出。 |
+
+已知限制：更新任務狀態未持久化且只有程序內鎖，請以單 worker 提供更新入口。部分來源失敗也可能回報 succeeded，須查看 log 確認更新／沿用／略過的來源。旧表讀取失敗時只輸出成功來源；此行為尚未改成拒絕寫入。NYX 出貨與匯出尚未接入。上述限制不視為已解決。
+
 ## ✅ Resolved Bugs
+
+### BUG-20260909-017 — 首頁可能在底層匯出失敗後仍顯示完成
+
+**Severity:** P1 / Correctness & UX
+
+**Affected:** `app.js`, `homeController.js`
+
+**Root Cause:** `onExportClick()` 在各客戶分支內攔截錯誤但沒有回傳結果，首頁 controller 因而無法辨識底層失敗，仍會繼續同步預覽並寫入「匯出完成」。
+
+**Fix:** 所有匯出分支統一回傳布林成功狀態；首頁只在 `true` 時顯示完成並捲回狀態列。失敗與取消流程保留 inline status，另顯示 error/info Toast。
+
+**Verification:** JavaScript syntax、前端 P1 regression 與實際瀏覽器錯誤／成功回饋流程檢查通過。
+
+**Resolved:** 2026-09-09
+
+### BUG-20260909-016 — MO 命中兩筆時只能看到並使用第一筆
+
+**Severity:** P1 / Correctness & UX
+
+**Affected:** `app.js`, `state.js`, `uiPreviewRenderers.js`, `main.css`, `homeController.js`
+
+**Root Cause:** 倫飛與 BNG 查詢流程固定將 `matchedRows[0]` 指派給 `state.currentRow`，成功預覽也只渲染第一列；使用者無法核對或指定第二列，首頁亦沒有選取同步機制。
+
+**Fix:** MO 恰好命中 2 筆時顯示警示與紅色粗體訊息，渲染兩張可點擊預覽卡；選取後更新 `state.currentRow`、目前索引及完整預覽，首頁同步 clone 更新。後續生成、匯出與 BNG 收據均使用目前選取列，切換時不重複彈出警示。
+
+**Verification:** JavaScript syntax、`git diff --check` 與前端 P1 regression 通過；靜態回歸檢查涵蓋雙預覽按鈕及 `aria-pressed` 選取狀態。
+
+**Resolved:** 2026-09-09
 
 ### BUG-20260909-015 — app.js 動態 HTML sink 分散且預覽內容重解析
 
@@ -229,15 +271,56 @@
 ## 🧪 Regression Commands
 
 ```powershell
-cd backend
-..\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py" -v
-..\.venv\Scripts\python.exe tests\t27_integration_runner.py
-cd ..
-node --check js\app.js
-node --check js\modules\ui.js
-node --check js\modules\uiPreviewRenderers.js
-node --check js\modules\previewCustomTabs.js
-node --experimental-default-type=module js\tests\p1_regression.mjs
+# 專案根目錄，安裝 backend/requirements.txt 後執行
+python -m pytest -q
+node --experimental-default-type=module js/tests/p1_regression.mjs
+node --check js/app.js
+git diff --check -- doc
 ```
 
-目前結果：P0/P1 regression 10/10、T27 integration 7/7、前端事件委派 regression 與 JavaScript syntax checks 全數通過。
+`pytest.ini` 收集 backend/tests/test_*.py，T27 runner 由 test_t27_integration.py 納入。測試覆蓋 P0/P1、API 契約、服務生命周期、資料驗證、WAL、型號／月份 CRUD、來源設定與背景合併。Docker 基準為 Python 3.12；請使用支援目前語法並已安裝完整套件的環境。實際本次結果見 update.md；歷史瀏覽器 QA 記錄不代表本次重新驗收。
+
+### 超恩 BIOS/FW 分享連結（2026-09-14 現況）
+
+`GET /api/vecow-link` 讀取、`PUT /api/vecow-link` 儲存 `{ "url": "https://…" }`；空白移除，最長 2000 字元，只接受無帳密的有效 HTTP(S) 網址。`VecowLinkService` 使用 SQLite `vecow_link` 單列（id=1），lifespan 初始化後由 router 從 app.state 取得。`js/modules/vecowLink.js` 管理維護表單、載入與連結顯示；首頁僅命中超恩時顯示，超恩工作區亦有入口，未設定時隱藏，新頁開啟使用 noopener noreferrer。此分享網址獨立於合併器 BIOS Excel 檔案路徑。維護入口以 Ctrl+Shift+D 切換顯示。
+
+## v0.3.61 現況補充（2026-09-14）
+
+本次以目前未提交工作樹核對，保留之前的修改紀錄。新增泉影 DEG 獨立生成面板、三種編碼規格、日期帶入、整批複製、Excel 下載與生成歷史；新增深色／淺色／彩色外觀選擇。後端允許七個 customer（原六客戶加 deg），前端 CUSTOMERS registry 與聚合搜尋仍為原六客戶，DEG 由獨立面板操作；NYX 仍僅提供主檔與月份維護。API 仍為 27 組 Method／Path，資料庫仍為八個表，DEG 重用 SN／export／history API 與既有歷史表。
+
+### DEG 與新功能排查
+
+- INVALID_DEG_OPTIONS：確認 HL 三位產品碼／YYWW、Pizza Box 料號／年份末位／週幾、Carton 真實日期及起號加數量上限。無效設定不應留下歷史。
+- 重複 DEG 序號：起號手動指定，歷史只記錄生成量與区間；再次使用相同起號會生成相同序號，現況未實作自動接續或重複偵測。
+- 日期跨年看似不一致：HL 保留日曆年＋ISO 週数，2021-01-01 為 2153，屬目前規格。
+- 下载失敗可重試：已成功生成的清單保留，使用下載按鈕，不須再次生成。
+- 主題未保存：確認 sn-color-theme 儲存權限；head 的預讀取失敗時回退深色，正常事件寫入透過既有 storage helper。
+- 對照圖未顯示：確認部署包含 assets/deg 四張 PNG，並核對靜態路徑。
+
+新增驗證命令：`python -m pytest -q backend/tests/test_deg.py`、`node --experimental-default-type=module js/tests/deg_regression.mjs`、`node --experimental-default-type=module js/tests/vecow_link_regression.mjs`。
+
+## v0.3.79 工作樹現況（2026-09-18）
+
+本版文件依目前未提交工作樹同步。現況包含可配置來源規則五階段、自訂來源建立與預覽、舊客戶比較遷移、DEG 編碼、勤誠 FZG 客序／MAC，以及富弘年 `dcg` 首頁搜尋。所有通用來源在更新總表後自動加入首頁工單／MO 搜尋，並使用超恩式摘要、分類卡片、預覽／原始資料頁籤與複製操作，不需新增客戶分支。前端已將主檔維護與來源維護分別抽至 `masterDataMaintenance.js`、`sourceMaintenance.js`。後端 Customer Enum 為 8 個值；現行 API 共 32 組 Method／Path，SQLite 共 8 張表。
+
+部署邊界：`deploy/shipment-release.json` 現為 0.3.79，本機執行 `shipment_check.py --check` 回傳 `errors: []`，清單內檔案雜湊、MIME、模組與來源設定檢查通過。此結果僅代表目前工作區自檢通過；本機未連線正式網路磁碟，亦未驗證正式伺服器部署、服務帳號權限或真實客戶資料比較。
+
+驗證狀態（2026-09-18）：`npm test` 的 7 組前端回歸全部通過（含 Playwright 來源規則瀏覽器流程）；後端完整測試為 `114 passed`；74 個 Python 檔語法解析通過；部署清單自檢無錯誤。
+
+### 來源規則、遷移與勤誠排查
+
+- 預覽失敗：依序查看檔名策略、實際分頁、表頭列、必要欄、位置映射、處理步骤；預覽不保存設定，也不代表已更新總表。
+- 更新顯示 retained：本次來源處理失敗但舊分頁仍在，錯誤原因不可忽略；skipped 表示無新資料亦無舊分頁。所有來源無成功資料時總表不取代。
+- 搜尋不到自訂來源：先保存来源、按更新資料，確認總表有同名分頁，再檢查指定欄名與 `/api/excel/load-source?source_key=...`。通用搜尋不會啟動客戶生成流程。
+- 搜尋不到富弘年：確認總表存在「富弘年出貨」分頁，並以 `/api/excel/load-source?source_key=dcg` 驗證。首頁會將 `dcg` 當通用來源載入、搜尋及完整渲染，不啟動原六客戶匯出或序號歷史。
+- DEG 綁定衝突：同時只能一個自訂來源使用 `search_customer=deg`，先將原來源改回通用。
+- 遷移 fallback／blocked：fallback 仍使用本次原處理器結果；blocked 的超恩／KOYA不應強制切換。正式啟用前用服務帳號對真實資料执行 compare。
+- release check 失敗：先確認 manifest 與工作樹皆為同一批 0.3.79 檔案；修改清單內檔案後須重建雜湊，不可忽略 hash／MIME／權限錯誤。本機目前 check 為 `errors: []`。
+- 勤誠序號耗盡：客序上限 99999，MAC 上限 2FFFFF；查看 status。重設會重新使用序號，只能在確認現場狀態後操作。
+- 勤誠料號錯誤：確認尾端 8 位分類碼，或至少三段破折號格式；FZG 序號面板只有命中勤誠來源時顯示。
+
+本次驗證（2026-09-18）：74 個 Python 檔可解析；`npm test` 的 7 組前端回歸全部通過，包含 Playwright 來源規則瀏覽器流程；後端完整測試為 `114 passed`；0.3.79 release check 回傳 `errors: []`。正式伺服器、服務帳號與真實網路磁碟資料未在本機驗收。
+
+## 0.3.79 文件同步狀態
+
+本文件已於 2026-09-18 依目前工作樹核對；細節以對應階段規格與原始碼為準。工作樹完成不代表正式機已部署。
